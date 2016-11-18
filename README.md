@@ -9,7 +9,8 @@ The code uses python 3.5 together with [Keras](https://keras.io/) and [music21](
 
 You can download and install DeepBach's dependencies with the following commands:
 
-```git clone git@github.com:SonyCSL-Paris/DeepBach.git
+```
+git clone git@github.com:SonyCSL-Paris/DeepBach.git
 cd DeepBach
 sudo pip3 install -r requirements.txt
 ```
