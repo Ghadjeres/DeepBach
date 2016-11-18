@@ -316,31 +316,12 @@ def gibbs(models=None, melody=None, fermatas_melody=None, sequence_length=50, nu
     temperature = 1.2
     # Main loop
     for iteration in tqdm(range(num_iterations)):
-        # if iteration % 2000 == 0:
-        #     print(temperature)
-        temperature = max(min_temperature, temperature * 0.99996)  # Recuit
 
-        # time_range = (range(timesteps, sequence_length + timesteps) if iteration % 2 else
-        #               range(sequence_length + timesteps - 1, timesteps - 1, -1))
-        # remove two loops and uncomment lines for random notes
-        # for time_index in range(timesteps, sequence_length + timesteps):
-        #     for voice_index in range(min_voice, num_voices):
+        temperature = max(min_temperature, temperature * 0.99996)  # Recuit
 
         voice_index = np.random.randint(min_voice, num_voices)
         time_index = np.random.randint(timesteps, sequence_length + timesteps)
 
-        # (left_feature,
-        #  central_feature,
-        #  right_feature,
-        #  beat,
-        #  label) = all_features(seq, voice_index, time_index, timesteps,
-        #                        min_pitches, max_pitches, num_voices, slur_symbol=True,
-        #                        chorale_as_pas=False)
-        #
-        # input_features = {'left_features': left_feature[None, :, :],
-        #                   'central_features': central_feature[None, :],
-        #                   'right_features': right_feature[None, :, :],
-        #                   'beats': beat[None, :]}
 
         (left_feature,
          central_feature,
@@ -382,11 +363,6 @@ def gibbs(models=None, melody=None, fermatas_melody=None, sequence_length=50, nu
         # use temperature
         probas_pitch = np.log(probas_pitch) / temperature
         probas_pitch = np.exp(probas_pitch) / np.sum(np.exp(probas_pitch)) - 1e-7
-
-        # Threshold
-        # mask = probas_pitch < 0.10
-        # probas_pitch[mask] = 0.
-        # probas_pitch = probas_pitch / np.sum(probas_pitch) - 1e-5
 
         # pitch can include slur_symbol
         pitch = np.argmax(np.random.multinomial(1, probas_pitch)) + min_pitches[voice_index]
@@ -436,8 +412,6 @@ def parallelGibbs(models=None, melody=None, fermatas_melody=None, sequence_lengt
         min_voice = 1
         # works only with reharmonization
 
-    # melody = X[-1][0, :, 0]
-    # melody is pa !
     if melody is not None:
         seq[timesteps:-timesteps, 0] = melody[:, 0]
         mask = melody[:, 1] == 0
@@ -456,15 +430,8 @@ def parallelGibbs(models=None, melody=None, fermatas_melody=None, sequence_lengt
     temperature = 1.2
     # Main loop
     for iteration in tqdm(range(num_iterations)):
-        # if iteration % 20 == 0:
-        #     print(temperature)
-        temperature = max(min_temperature, temperature * 0.99)  # Recuit
 
-        # time_range = (range(timesteps, sequence_length + timesteps) if iteration % 2 else
-        #               range(sequence_length + timesteps - 1, timesteps - 1, -1))
-        # remove two loops and uncomment lines for random notes
-        # for time_index in range(timesteps, sequence_length + timesteps):
-        #     for voice_index in range(min_voice, num_voices):
+        temperature = max(min_temperature, temperature * 0.99)  # Recuit
 
         time_indexes = {}
         probas = {}
@@ -527,11 +494,6 @@ def parallelGibbs(models=None, melody=None, fermatas_melody=None, sequence_lengt
                     probas_pitch = np.log(probas_pitch) / temperature
                     probas_pitch = np.exp(probas_pitch) / np.sum(np.exp(probas_pitch)) - 1e-7
 
-                    # Threshold
-                    # mask = probas_pitch < 0.10
-                    # probas_pitch[mask] = 0.
-                    # probas_pitch = probas_pitch / np.sum(probas_pitch) - 1e-5
-
                     # pitch can include slur_symbol
                     pitch = np.argmax(np.random.multinomial(1, probas_pitch)) + min_pitches[voice_index]
 
@@ -546,11 +508,6 @@ def parallelGibbs(models=None, melody=None, fermatas_melody=None, sequence_lengt
                     # use temperature
                     probas_pitch = np.log(probas_pitch) / temperature
                     probas_pitch = np.exp(probas_pitch) / np.sum(np.exp(probas_pitch)) - 1e-7
-
-                    # Threshold
-                    # mask = probas_pitch < 0.10
-                    # probas_pitch[mask] = 0.
-                    # probas_pitch = probas_pitch / np.sum(probas_pitch) - 1e-5
 
                     # pitch can include slur_symbol
                     pitch = np.argmax(np.random.multinomial(1, probas_pitch)) + min_pitches[voice_index]
@@ -591,7 +548,7 @@ def save_model(model, model_name, yaml=True, overwrite=False):
     print("model " + model_name + " saved")
 
 
-def create_models(model_name=None, create_new=False):
+def create_models(model_name=None, create_new=False, num_dense=200, num_units_lstm=[200,200]):
     """
     Choose one model
     :param model_name:
@@ -610,23 +567,23 @@ def create_models(model_name=None, create_new=False):
          beats,
          labels, fermatas) = next(gen)
 
-        if model_name == 'deepbach':
+        if 'deepbach' in model_name:
             model = deepBach(num_features_lr=left_features.shape[-1],
                              num_features_c=central_features.shape[-1],
                              num_pitches=max_pitches[voice_index] - min_pitches[voice_index] + 1
                                          + 1,  # for continuation symbol
-                             num_dense=200, num_units_lstm=[200, 200])
-        elif model_name == 'maxent':
+                             num_dense=num_dense, num_units_lstm=num_units_lstm)
+        elif 'maxent' in model_name:
             model = maxEnt(num_features_lr=left_features.shape[-1],
                            num_features_c=central_features.shape[-1],
                            num_pitches=max_pitches[voice_index] - min_pitches[voice_index] + 1
                                        + 1)  # for continuation symbol
-        elif model_name == 'mlp':
+        elif 'mlp' in model_name:
             model = mlp(num_features_lr=left_features.shape[-1],
                         num_features_c=central_features.shape[-1],
                         num_pitches=max_pitches[voice_index] - min_pitches[voice_index] + 1
                                     + 1,
-                        num_hidden=200)  # for continuation symbol
+                        num_hidden=num_dense)  # for continuation symbol
         else:
             raise ValueError
 
@@ -821,9 +778,12 @@ if __name__ == '__main__':
     parser.add_argument('--num_val_samples',
                         help='number of validation samples (default: %(default)s)',
                         type=int, default=1280)
-    parser.add_argument('-u', '--num_units_lstm',
+    parser.add_argument('-u', '--num_units_lstm', nargs='+',
                         help='number of lstm units (default: %(default)s)',
-                        type=int, default=256)
+                        type=int, default=[200, 200])
+    parser.add_argument('-d', '--num_dense',
+                        help='size of non recurrent hidden layers (default: %(default)s)',
+                        type=int, default=200)
     parser.add_argument('-n', '--name',
                         help='model name (default: %(default)s)',
                         choices=['deepbach', 'mlp', 'maxent'],
@@ -832,10 +792,10 @@ if __name__ == '__main__':
                         help='number of gibbs iterations (default: %(default)s)',
                         type=int, default=20000)
     parser.add_argument('-t', '--train', nargs='?',
-                        help='train models for N epochs (default: %(default)s)',
+                        help='train models for N epochs (default: 15)',
                         default=0, const=15, type=int)
     parser.add_argument('-p', '--parallel', nargs='?',
-                        help='number of parallel updates (default: %(default)s)',
+                        help='number of parallel updates (default: 16)',
                         type=int, const=16, default=1)
     parser.add_argument('--overwrite',
                         help='overwrite previously computed models',
@@ -857,10 +817,14 @@ if __name__ == '__main__':
     samples_per_epoch = args.samples_per_epoch
     nb_val_samples = args.num_val_samples
     num_units_lstm = args.num_units_lstm
-    ext = args.ext
-    model_name = args.name.lower() + '_' + ext
+    if args.ext:
+        ext = '_' + args.ext
+
+    model_name = args.name.lower() + ext
     sequence_length = args.length
     batch_size_per_voice = args.parallel
+    num_units_lstm = args.num_units_lstm
+    num_dense = args.num_dense
 
 
     fermatas_melody = None
@@ -895,7 +859,7 @@ if __name__ == '__main__':
     # melody = None
 
     if not os.path.exists('models/' + model_name + '_3.yaml'):
-        create_models(model_name, create_new=overwrite)
+        create_models(model_name, create_new=overwrite, num_units_lstm=num_units_lstm, num_dense=num_dense)
     if train:
         models = train_models(model_name=model_name,
                               samples_per_epoch=samples_per_epoch,
