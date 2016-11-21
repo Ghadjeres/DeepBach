@@ -56,6 +56,9 @@ optional arguments:
   -l LENGTH, --length LENGTH
                         length of unconstrained generation
   --ext EXT             extension of model name
+  -o [OUTPUT_FILE], --output_file [OUTPUT_FILE]
+                        path to output file
+
 ```
 
 # Examples
