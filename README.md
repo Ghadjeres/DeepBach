@@ -74,4 +74,5 @@ python3 deepBach.py -m midi/file/path.mid -p -i 10000
 ```
 
 
+
 Default values load pre-trained DeepBach model and generate a chorale using sequential Gibbs sampling with 20000 iterations
