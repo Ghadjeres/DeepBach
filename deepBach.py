@@ -23,10 +23,9 @@ from data_utils import BEAT_SIZE, \
     seqs_to_stream, as_ps_to_as_pas, initialization
 
 
-
 def generation(model_base_name, models, min_pitches, max_pitches, melody=None,
                initial_seq=None, temperature=1.0,
-               fermatas_melody=None, parallel=False, batch_size_per_voice=8, num_iterations=None, sequence_length=160):
+               fermatas_melody=None, parallel=False, batch_size_per_voice=8, num_iterations=None, sequence_length=160, output_file=None):
     # Test by generating a sequence
 
     if parallel:
@@ -44,9 +43,19 @@ def generation(model_base_name, models, min_pitches, max_pitches, melody=None,
                     min_pitches=min_pitches, max_pitches=max_pitches, temperature=temperature,
                     initial_seq=initial_seq)
 
+    # convert
     score = seq_to_stream_slur(np.transpose(seq, axes=(1, 0)),
                                min_pitches, max_pitches
                                )
+
+    # save as MIDI file
+    if output_file:
+        mf = midi.translate.music21ObjectToMidiFile(score)
+        mf.open(output_file, 'wb')
+        mf.write()
+        mf.close()
+        print("File " + output_file + " written")
+
 
     score.show()
     return seq
@@ -322,7 +331,6 @@ def gibbs(models=None, melody=None, fermatas_melody=None, sequence_length=50, nu
         voice_index = np.random.randint(min_voice, num_voices)
         time_index = np.random.randint(timesteps, sequence_length + timesteps)
 
-
         (left_feature,
          central_feature,
          right_feature,
@@ -548,7 +556,7 @@ def save_model(model, model_name, yaml=True, overwrite=False):
     print("model " + model_name + " saved")
 
 
-def create_models(model_name=None, create_new=False, num_dense=200, num_units_lstm=[200,200]):
+def create_models(model_name=None, create_new=False, num_dense=200, num_units_lstm=[200, 200]):
     """
     Choose one model
     :param model_name:
@@ -809,6 +817,9 @@ if __name__ == '__main__':
     parser.add_argument('--ext',
                         help='extension of model name',
                         type=str, default='')
+    parser.add_argument('-o', '--output_file', nargs='?',
+                        help='path to output file',
+                        type=str, default='', const='generated_examples/example.mid')
     args = parser.parse_args()
     print(args)
 
@@ -817,8 +828,11 @@ if __name__ == '__main__':
     samples_per_epoch = args.samples_per_epoch
     nb_val_samples = args.num_val_samples
     num_units_lstm = args.num_units_lstm
+
     if args.ext:
         ext = '_' + args.ext
+    else:
+        ext = ''
 
     model_name = args.name.lower() + ext
     sequence_length = args.length
@@ -826,6 +840,10 @@ if __name__ == '__main__':
     num_units_lstm = args.num_units_lstm
     num_dense = args.num_dense
 
+    if args.output_file:
+        output_file = args.output_file
+    else:
+        output_file = None
 
     fermatas_melody = None
     # when reharmonization
@@ -871,9 +889,13 @@ if __name__ == '__main__':
     temperature = 1.
 
     timesteps = int(models[0].input[0]._shape[1])
+
+
     seq = generation(model_base_name=model_name, models=models,
                      min_pitches=min_pitches,
                      max_pitches=max_pitches, melody=melody, initial_seq=None, temperature=temperature,
                      fermatas_melody=fermatas_melody, parallel=parallel, batch_size_per_voice=batch_size_per_voice,
                      num_iterations=num_iterations,
-                     sequence_length=sequence_length)
+                     sequence_length=sequence_length,
+                     output_file=output_file)
+

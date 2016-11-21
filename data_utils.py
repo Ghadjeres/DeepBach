@@ -967,8 +967,6 @@ def all_features(chorale, voice_index, time_index, timesteps, min_pitches, max_p
                                                           max_pitches, num_voices)
     else:
         # when chorale already contains slur_symbols
-        print("Warning: Bad arguments. Using all_features with fermatas=" +
-              " and chorale_as_pas=" + str(chorale_as_pas))
 
         return all_features_from_slur_chorale(chorale, voice_index, time_index, timesteps,
                                               min_pitches, max_pitches,

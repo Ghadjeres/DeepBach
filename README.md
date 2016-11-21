@@ -9,7 +9,8 @@ The code uses python 3.5 together with [Keras](https://keras.io/) and [music21](
 
 You can download and install DeepBach's dependencies with the following commands:
 
-```git clone git@github.com:SonyCSL-Paris/DeepBach.git
+```
+git clone git@github.com:SonyCSL-Paris/DeepBach.git
 cd DeepBach
 sudo pip3 install -r requirements.txt
 ```
@@ -71,7 +72,6 @@ Generate chorale harmonization with soprano extracted from midi/file/path.mid us
 ```
 python3 deepBach.py -m midi/file/path.mid -p -i 10000
 ```
-
 
 
 Default values load pre-trained DeepBach model and generate a chorale using sequential Gibbs sampling with 20000 iterations
