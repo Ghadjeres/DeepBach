@@ -888,7 +888,7 @@ if __name__ == '__main__':
 
     temperature = 1.
 
-    timesteps = int(models[0].input[0]._shape[1])
+    timesteps = int(models[0].input[0]._keras_shape[1])
 
 
     seq = generation(model_base_name=model_name, models=models,
