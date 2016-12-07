@@ -31,7 +31,7 @@ RAW_DATASET_NO_TRANSPOSITION = 'datasets/' \
                                'raw_dataset/' \
                                'bach_chorales_no_transposition.pickle'
 
-voice_ids = [0, 1, 2, 3]  # soprano, alto, tenor, bass
+voice_ids = list(range(NUM_VOICES))  # soprano, alto, tenor, bass
 
 
 def filter_file_list(file_list):
@@ -518,7 +518,7 @@ def make_raw_dataset(file_list, dataset_name, num_voices=4, transpose=False, min
     :param dataset_name:
     :param num_voices:
     :param transpose:
-    :return:  tuple (X, min_pitches, max_pitches, num_voices) where X is list of (num_voices, time, 2)
+    :return:  tuple (X, min_pitches, max_pitches, num_voices) where X is list of (num_voices, time, 3)
     """
     if min_pitches is None or max_pitches is None:
         raise Exception('min_pitches and max_pitches must be provided as arguments. See compute_min_max_pitches')
