@@ -1,8 +1,8 @@
 # DeepBach
 This repository contains the implementation of the DeepBach model described in 
 
-*DeepBach: a Steerable Model for Bach chorales generation*
-Gaëtan Hadjeres, François Pachet
+*DeepBach: a Steerable Model for Bach chorales generation*<br/>
+Gaëtan Hadjeres, François Pachet<br/>
 *arXiv preprint [arXiv:1612.01010](https://arxiv.org/abs/1612.01010)*
 
 The code uses python 3.5 together with [Keras](https://keras.io/) and [music21](http://web.mit.edu/music21/) libraries.
