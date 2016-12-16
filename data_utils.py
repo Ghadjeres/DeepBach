@@ -26,13 +26,12 @@ BEAT_SIZE = 4
 
 OCTAVE = 12
 
-
 RAW_DATASET = 'datasets/raw_dataset/bach_chorales.pickle'
 RAW_DATASET_NO_TRANSPOSITION = 'datasets/' \
-                                       'raw_dataset/' \
-                                       'bach_chorales_no_transposition.pickle'
+                               'raw_dataset/' \
+                               'bach_chorales_no_transposition.pickle'
 
-voice_ids = [0, 1, 2, 3]  # soprano, alto, tenor, bass
+voice_ids = list(range(NUM_VOICES))  # soprano, alto, tenor, bass
 
 
 def filter_file_list(file_list):
@@ -210,16 +209,6 @@ def pitch_column_to_one_hot(col, MIN_PITCH, MAX_PITCH):
     return np.vectorize(lambda x: x in col)(np.arange(MIN_PITCH, MAX_PITCH + 1))
 
 
-# def to_beat(time):
-#     """
-#     time is given in the number of 16th notes
-#
-#     Returns metrical position one-hot encoded
-#     """
-#     beat = [0] * 4
-#     beat[time % 4] = 1
-#     return beat
-
 def to_beat(time, timesteps=None):
     """
     time is given in the number of 16th notes
@@ -243,14 +232,6 @@ def to_beat(time, timesteps=None):
     return left_beats, np.array(beat), right_beats
 
 
-ICH_RUF_ZU_DIR_fermatas = np.concatenate((np.zeros((16,)),
-                                          (np.ones((16,))),
-                                          np.array(chorale_to_input_with_fermata(
-                                              '/usr/local/lib/python3.5/dist-packages/music21/corpus/bach/bwv177.5.mxl',
-                                              voice_id=0))[:, 2],
-                                          (np.zeros((32,)))))
-
-
 def is_fermata(time):
     """
     Returns a boolean
@@ -260,7 +241,7 @@ def is_fermata(time):
     :return:
     """
     # evenly spaced fermatas
-    # return (time // SUBDIVISION) % SPACING_FERMATAS < FERMATAS_LENGTH
+    return (time // SUBDIVISION) % SPACING_FERMATAS < FERMATAS_LENGTH
 
     # for god save the queen
     # must add timesteps when
@@ -270,9 +251,6 @@ def is_fermata(time):
 
     # no fermata
     # return 0
-
-    # ich ruf zu dir fermatas
-    return ICH_RUF_ZU_DIR_fermatas[time]
 
 
 def fermata_melody_to_fermata(time, timesteps=None, fermatas_melody=None):
@@ -540,7 +518,7 @@ def make_raw_dataset(file_list, dataset_name, num_voices=4, transpose=False, min
     :param dataset_name:
     :param num_voices:
     :param transpose:
-    :return:  tuple (X, min_pitches, max_pitches, num_voices) where X is list of (num_voices, time, 2)
+    :return:  tuple (X, min_pitches, max_pitches, num_voices) where X is list of (num_voices, time, 3)
     """
     if min_pitches is None or max_pitches is None:
         raise Exception('min_pitches and max_pitches must be provided as arguments. See compute_min_max_pitches')
@@ -1049,7 +1027,6 @@ def all_features_from_pa_chorale(chorale, voice_index, time_index, timesteps,
                                     max_pitches=max_pitches[mask])
 
     beat = to_beat(time_index, timesteps=timesteps)
-
 
     label = pa_to_onehot(chorale[time_index, voice_index, :], min_pitch=min_pitches[voice_index],
                          max_pitch=max_pitches[voice_index])
@@ -1575,11 +1552,11 @@ if __name__ == '__main__':
 
     min_pitches, max_pitches = compute_min_max_pitches(chorale_list, voices=voice_ids)
 
-    make_raw_dataset(chorale_list, RAW_DATASET,
-                     num_voices=len(voice_ids),
-                     transpose=True,
-                     min_pitches=min_pitches, max_pitches=max_pitches,
-                     voice_ids=voice_ids)
-    # make_raw_dataset(chorale_list, RAW_DATASET_FERMATA_NO_TRANSPOSITION, num_voices=4, transpose=False,
-    #                  min_pitches=min_pitches, max_pitches=max_pitches)
+    # make_raw_dataset(chorale_list, RAW_DATASET,
+    #                  num_voices=len(voice_ids),
+    #                  transpose=True,
+    #                  min_pitches=min_pitches, max_pitches=max_pitches,
+    #                  voice_ids=voice_ids)
+    make_raw_dataset(chorale_list, RAW_DATASET_NO_TRANSPOSITION, num_voices=4, transpose=False,
+                     min_pitches=min_pitches, max_pitches=max_pitches)
     exit()
