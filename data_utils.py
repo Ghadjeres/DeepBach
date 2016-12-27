@@ -41,7 +41,8 @@ def filter_file_list(file_list):
     l = []
     for file_name in file_list:
         c = converter.parse(file_name)
-        if len(c.parts) == NUM_VOICES and c.parts[0].id == 'Soprano':
+        # if len(c.parts) == NUM_VOICES and c.parts[0].id == 'Soprano':
+        if len(c.parts) == NUM_VOICES:
             # Retain only chorals with fermatas
 
             if len(list(filter(lambda n: len(n.expressions) == 1, c.parts[0].flat.notes))) > 0:
@@ -1534,13 +1535,19 @@ def seq_to_stream_slur(seq, min_pitches=None, max_pitches=None):
     return score
 
 
-def initialization():
+def initialization(dataset_path=None):
+    from glob import glob
     print('Creating dataset')
-    chorale_list = filter_file_list(corpus.getBachChorales(fileExtensions='xml'))
+    if dataset_path:
+        chorale_list = filter_file_list(glob(dataset_path + '/*.mid') + glob(dataset_path + '/*.xml'))
+        pickled_dataset = 'datasets/custom_dataset/' + dataset_path.split('/')[-1] + '.pickle'
+    else:
+        chorale_list = filter_file_list(corpus.getBachChorales(fileExtensions='xml'))
+        pickled_dataset = RAW_DATASET
 
     min_pitches, max_pitches = compute_min_max_pitches(chorale_list, voices=voice_ids)
 
-    make_raw_dataset(chorale_list, RAW_DATASET,
+    make_raw_dataset(chorale_list, pickled_dataset,
                      num_voices=len(voice_ids),
                      transpose=True,
                      min_pitches=min_pitches, max_pitches=max_pitches,

@@ -6,10 +6,11 @@ Created on 15 mars 2016
 import argparse
 import os
 import pickle
+import random
 
 import numpy as np
 from keras.engine import Input
-from keras.layers import LSTM, Dense, TimeDistributed, merge, Reshape
+from keras.layers import LSTM, Dense, TimeDistributed, merge, Reshape, Lambda, Activation
 from keras.layers.core import Dropout
 from keras.models import Model
 from keras.models import model_from_json, model_from_yaml
@@ -22,10 +23,13 @@ from data_utils import BEAT_SIZE, \
     F_INDEX, to_fermata, seq_to_stream_slur, fermata_melody_to_fermata, \
     seqs_to_stream, as_ps_to_as_pas, initialization
 
+from fast_weights.fw.fast_weights_layer import FastWeights
+
 
 def generation(model_base_name, models, min_pitches, max_pitches, melody=None,
                initial_seq=None, temperature=1.0,
-               fermatas_melody=None, parallel=False, batch_size_per_voice=8, num_iterations=None, sequence_length=160, output_file=None):
+               fermatas_melody=None, parallel=False, batch_size_per_voice=8, num_iterations=None, sequence_length=160,
+               output_file=None):
     # Test by generating a sequence
 
     if parallel:
@@ -55,7 +59,6 @@ def generation(model_base_name, models, min_pitches, max_pitches, melody=None,
         mf.write()
         mf.close()
         print("File " + output_file + " written")
-
 
     score.show()
     return seq
@@ -163,6 +166,83 @@ def maxEnt(num_features_lr, num_features_c, num_pitches):
     return model
 
 
+def fastBach(num_features_lr, num_features_c, num_pitches, num_units_lstm=[200],
+             num_dense=200, batch_size=16):
+    """
+
+    :param num_features_lr: size of left or right features vectors
+    :param num_features_c: size of central features vectors
+    :param num_pitches: size of output
+    :param num_units_lstm: list of lstm layer sizes
+    :param num_dense:
+    :return:
+    """
+    left_features = Input(shape=(timesteps, num_features_lr), name='left_features')
+    right_features = Input(shape=(timesteps, num_features_lr), name='right_features')
+    central_features = Input(shape=(num_features_c,), name='central_features')
+    beat = Input(shape=(BEAT_SIZE,), name='beat')
+    beats_right = Input(shape=(timesteps, BEAT_SIZE), name='beats_right')
+    beats_left = Input(shape=(timesteps, BEAT_SIZE), name='beats_left')
+    fermatas_left = Input(shape=(timesteps, BITS_FERMATA), name='fermatas_left')
+    fermatas_right = Input(shape=(timesteps, BITS_FERMATA), name='fermatas_right')
+    central_fermata = Input(shape=(BITS_FERMATA,), name='central_fermata')
+
+    # embedding layer for left and right
+    embedding_left = Dense(input_dim=num_features_lr + BEAT_SIZE + BITS_FERMATA,
+                           output_dim=num_dense, name='embedding_left')
+    embedding_right = Dense(input_dim=num_features_lr + BEAT_SIZE + BITS_FERMATA,
+                            output_dim=num_dense, name='embedding_right')
+
+    predictions_left = TimeDistributed(embedding_left)(merge((left_features,
+                                                              beats_left,
+                                                              fermatas_left),
+                                                             mode='concat'))
+    predictions_right = TimeDistributed(embedding_right)(merge((right_features,
+                                                                beats_right,
+                                                                fermatas_right),
+                                                               mode='concat'))
+
+    predictions_center = merge((central_features, beat,
+                                central_fermata), mode='concat')
+
+    predictions_center = Dense(num_dense, activation='relu')(predictions_center)
+    predictions_center = Dense(num_dense, activation='relu')(predictions_center)
+
+    return_sequences = True
+    for k, stack_index in enumerate(range(len(num_units_lstm))):
+        if k == len(num_units_lstm) - 1:
+            return_sequences = False
+        predictions_left = FastWeights(num_units_lstm[stack_index],
+                                       return_sequences=return_sequences,
+                                       name='lstm_left_' + str(stack_index),
+                                       unroll=True, consume_less='gpu'
+                                       )(predictions_left)
+        predictions_right = FastWeights(num_units_lstm[stack_index],
+                                        return_sequences=return_sequences,
+                                        name='lstm_right_' + str(stack_index),
+                                        unroll=True,
+                                        consume_less='gpu'
+
+                                        )(predictions_right)
+
+    predictions = merge((predictions_left, predictions_center, predictions_right),
+                        mode='concat')
+    predictions = Dense(num_dense, activation='relu')(predictions)
+    pitch_prediction = Dense(num_pitches, activation='softmax',
+                             name='pitch_prediction')(predictions)
+
+    model = Model(input=[left_features, central_features, right_features,
+                         beat, beats_left, beats_right,
+                         fermatas_left, fermatas_right, central_fermata],
+                  output=pitch_prediction)
+
+    model.compile(optimizer='adam',
+                  loss={'pitch_prediction': 'categorical_crossentropy'},
+                  metrics=['accuracy'])
+    model.summary()
+    return model
+
+
 def deepBach(num_features_lr, num_features_c, num_pitches, num_units_lstm=[200],
              num_dense=200):
     """
@@ -219,6 +299,110 @@ def deepBach(num_features_lr, num_features_c, num_pitches, num_units_lstm=[200],
                                  )(predictions_right)
 
     predictions = merge((predictions_left, predictions_center, predictions_right),
+                        mode='concat')
+    predictions = Dense(num_dense, activation='relu')(predictions)
+    pitch_prediction = Dense(num_pitches, activation='softmax',
+                             name='pitch_prediction')(predictions)
+
+    model = Model(input=[left_features, central_features, right_features,
+                         beat, beats_left, beats_right,
+                         fermatas_left, fermatas_right, central_fermata],
+                  output=pitch_prediction)
+
+    model.compile(optimizer='adam',
+                  loss={'pitch_prediction': 'categorical_crossentropy'},
+                  metrics=['accuracy'])
+    model.summary()
+    return model
+
+
+def skip(num_features_lr, num_features_c, num_pitches, num_units_lstm=[200],
+         num_dense=200):
+    """
+
+    :param num_features_lr: size of left or right features vectors
+    :param num_features_c: size of central features vectors
+    :param num_pitches: size of output
+    :param num_units_lstm: list of lstm layer sizes
+    :param num_dense:
+    :return:
+    """
+    left_features = Input(shape=(timesteps, num_features_lr), name='left_features')
+    right_features = Input(shape=(timesteps, num_features_lr), name='right_features')
+    central_features = Input(shape=(num_features_c,), name='central_features')
+    beat = Input(shape=(BEAT_SIZE,), name='beat')
+    beats_right = Input(shape=(timesteps, BEAT_SIZE), name='beats_right')
+    beats_left = Input(shape=(timesteps, BEAT_SIZE), name='beats_left')
+    fermatas_left = Input(shape=(timesteps, BITS_FERMATA), name='fermatas_left')
+    fermatas_right = Input(shape=(timesteps, BITS_FERMATA), name='fermatas_right')
+    central_fermata = Input(shape=(BITS_FERMATA,), name='central_fermata')
+
+    # embedding layer for left and right
+    embedding_left = Dense(input_dim=num_features_lr + BEAT_SIZE + BITS_FERMATA,
+                           output_dim=num_dense, name='embedding_left')
+    embedding_right = Dense(input_dim=num_features_lr + BEAT_SIZE + BITS_FERMATA,
+                            output_dim=num_dense, name='embedding_right')
+
+    predictions_left = TimeDistributed(embedding_left)(merge((left_features,
+                                                              beats_left,
+                                                              fermatas_left),
+                                                             mode='concat'))
+    predictions_right = TimeDistributed(embedding_right)(merge((right_features,
+                                                                beats_right,
+                                                                fermatas_right),
+                                                               mode='concat'))
+
+    predictions_center = merge((central_features, beat,
+                                central_fermata), mode='concat')
+
+    predictions_center = Dense(num_dense, activation='relu')(predictions_center)
+    predictions_center = Dense(num_dense, activation='relu')(predictions_center)
+
+    # dropout
+    predictions_left = Dropout(0.2)(predictions_left)
+    predictions_right = Dropout(0.2)(predictions_right)
+    predictions_center = Dropout(0.2)(predictions_center)
+
+    return_sequences = True
+    for k, stack_index in enumerate(range(len(num_units_lstm))):
+        if k == len(num_units_lstm) - 1:
+            return_sequences = False
+
+        if k > 0:
+            # todo it merges all inputs, not only the previous one
+            predictions_left_tmp = merge([Activation('relu')(predictions_left), predictions_left_old], mode='concat')
+            predictions_right_tmp = merge([Activation('relu')(predictions_right), predictions_right_old], mode='concat')
+        else:
+            predictions_left_tmp = predictions_left
+            predictions_right_tmp = predictions_right
+
+        predictions_left_old = predictions_left
+        predictions_right_old = predictions_right
+        predictions_left = predictions_left_tmp
+        predictions_right = predictions_right_tmp
+
+        predictions_left = LSTM(num_units_lstm[stack_index],
+                                return_sequences=return_sequences,
+                                name='lstm_left_' + str(stack_index)
+                                )(predictions_left)
+
+        predictions_right = LSTM(num_units_lstm[stack_index],
+                                 return_sequences=return_sequences,
+                                 name='lstm_right_' + str(stack_index)
+                                 )(predictions_right)
+        # todo add relu
+
+    # retain only last input for skip connections
+    predictions_left_old = Lambda(lambda t: t[:, -1, :],
+                                  output_shape=lambda input_shape: (input_shape[0], input_shape[-1])
+                                  )(predictions_left_old)
+    predictions_right_old = Lambda(lambda t: t[:, -1, :],
+                                   output_shape=lambda input_shape: (input_shape[0], input_shape[-1],)
+                                   )(predictions_right_old)
+    predictions_left = merge([Activation('relu')(predictions_left), predictions_left_old], mode='concat')
+    predictions_right = merge([Activation('relu')(predictions_right), predictions_right_old], mode='concat')
+
+    predictions = merge([predictions_left, predictions_center, predictions_right],
                         mode='concat')
     predictions = Dense(num_dense, activation='relu')(predictions)
     pitch_prediction = Dense(num_pitches, activation='softmax',
@@ -436,6 +620,7 @@ def parallelGibbs(models=None, melody=None, fermatas_melody=None, sequence_lengt
 
     min_temperature = temperature
     temperature = 1.2
+
     # Main loop
     for iteration in tqdm(range(num_iterations)):
 
@@ -445,7 +630,9 @@ def parallelGibbs(models=None, melody=None, fermatas_melody=None, sequence_lengt
         probas = {}
         for voice_index in range(min_voice, num_voices):
             batch_input_features = []
+
             time_indexes[voice_index] = []
+
             for batch_index in range(batch_size_per_voice):
 
                 time_index = np.random.randint(timesteps, sequence_length + timesteps)
@@ -533,7 +720,7 @@ def load_model(model_name, yaml=True):
     """
     if yaml:
         ext = '.yaml'
-        model = model_from_yaml(open(model_name + ext).read())
+        model = model_from_yaml(open(model_name + ext).read(), custom_objects={'FastWeights': FastWeights})
     else:
         ext = '.json'
         model = model_from_json(open(model_name + ext).read())
@@ -556,14 +743,15 @@ def save_model(model, model_name, yaml=True, overwrite=False):
     print("model " + model_name + " saved")
 
 
-def create_models(model_name=None, create_new=False, num_dense=200, num_units_lstm=[200, 200]):
+def create_models(model_name=None, create_new=False, num_dense=200, num_units_lstm=[200, 200],
+                  pickled_dataset=RAW_DATASET):
     """
     Choose one model
     :param model_name:
     :return:
     """
 
-    _, min_pitches, max_pitches, num_voices = pickle.load(open(RAW_DATASET, 'rb'))
+    _, min_pitches, max_pitches, num_voices = pickle.load(open(pickled_dataset, 'rb'))
     for voice_index in range(4):
         # We only need one example for features dimensions
         gen = generator_from_raw_dataset(batch_size=batch_size, timesteps=timesteps,
@@ -592,6 +780,18 @@ def create_models(model_name=None, create_new=False, num_dense=200, num_units_ls
                         num_pitches=max_pitches[voice_index] - min_pitches[voice_index] + 1
                                     + 1,
                         num_hidden=num_dense)  # for continuation symbol
+        elif 'fastbach' in model_name:
+            model = fastBach(num_features_lr=left_features.shape[-1],
+                             num_features_c=central_features.shape[-1],
+                             num_pitches=max_pitches[voice_index] - min_pitches[voice_index] + 1
+                                         + 1,  # for continuation symbol
+                             num_dense=num_dense, num_units_lstm=num_units_lstm)
+        elif 'skip' in model_name:
+            model = skip(num_features_lr=left_features.shape[-1],
+                         num_features_c=central_features.shape[-1],
+                         num_pitches=max_pitches[voice_index] - min_pitches[voice_index] + 1
+                                     + 1,  # for continuation symbol
+                         num_dense=num_dense, num_units_lstm=num_units_lstm)
         else:
             raise ValueError
 
@@ -621,7 +821,7 @@ def load_models(model_base_name=None):
 def train_models(model_name,
                  samples_per_epoch,
                  num_epochs,
-                 nb_val_samples):
+                 nb_val_samples, timesteps):
     """
     Train models
 
@@ -765,13 +965,31 @@ def export_bach_turing_test(chorale_list, export_directory, in_one_file=False):
         mf.close()
 
 
-if __name__ == '__main__':
-    if not os.path.exists(RAW_DATASET):
-        initialization()
+# todo to remove
+def update(positions, delta, rho, max_position, num_iterations=1):
+    for _ in range(num_iterations):
+        k = random.randrange(len(positions))
+        dk = random.randint(-delta, delta)
 
-    # load dataset
-    X, min_pitches, max_pitches, num_voices = pickle.load(open(RAW_DATASET,
-                                                               'rb'))
+        # min_position is 0
+        if k > 0:
+            left_boundary = positions[k - 1] + rho
+        else:
+            left_boundary = 0
+
+        # max_position is max_position
+        if k == len(positions) - 1:
+            right_boundary = max_position
+        else:
+            right_boundary = positions[k + 1] - rho
+
+        if left_boundary <= positions[k] + dk <= right_boundary:
+            positions[k] += dk
+
+    return positions
+
+
+if __name__ == '__main__':
 
     # parse arguments
     parser = argparse.ArgumentParser()
@@ -794,7 +1012,7 @@ if __name__ == '__main__':
                         type=int, default=200)
     parser.add_argument('-n', '--name',
                         help='model name (default: %(default)s)',
-                        choices=['deepbach', 'mlp', 'maxent'],
+                        choices=['deepbach', 'mlp', 'maxent', 'fastbach', 'skip'],
                         type=str, default='deepbach')
     parser.add_argument('-i', '--num_iterations',
                         help='number of gibbs iterations (default: %(default)s)',
@@ -820,8 +1038,28 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output_file', nargs='?',
                         help='path to output file',
                         type=str, default='', const='generated_examples/example.mid')
+    parser.add_argument('--dataset', nargs='?',
+                        help='path to dataset folder',
+                        type=str, default='')
     args = parser.parse_args()
-    print(args)
+    # print(args)
+
+    # datasets
+    # change RAW_DATASET constant i argument is present
+    if args.dataset:
+        dataset_path = args.dataset
+        dataset_name = dataset_path.split('/')[-1]
+        pickled_dataset = 'datasets/custom_dataset/' + dataset_name + '.pickle'
+    else:
+        dataset_path = None
+        pickled_dataset = RAW_DATASET
+
+    if not os.path.exists(pickled_dataset):
+        initialization(dataset_path)
+
+    # load dataset
+    X, min_pitches, max_pitches, num_voices = pickle.load(open(pickled_dataset,
+                                                               'rb'))
 
     timesteps = args.timesteps
     batch_size = args.batch_size_train
@@ -882,14 +1120,14 @@ if __name__ == '__main__':
         models = train_models(model_name=model_name,
                               samples_per_epoch=samples_per_epoch,
                               nb_val_samples=nb_val_samples,
-                              num_epochs=num_epochs)
+                              num_epochs=num_epochs,
+                              timesteps=timesteps)
     else:
         models = load_models(model_name)
 
     temperature = 1.
 
     timesteps = int(models[0].input[0]._keras_shape[1])
-
 
     seq = generation(model_base_name=model_name, models=models,
                      min_pitches=min_pitches,
@@ -898,4 +1136,3 @@ if __name__ == '__main__':
                      num_iterations=num_iterations,
                      sequence_length=sequence_length,
                      output_file=output_file)
-

@@ -79,5 +79,13 @@ python3 deepBach.py -m midi/file/path.mid -p -i 10000
 ```
 
 
+Use another model with custom parameters:
+```
+python3 deepBach.py -n fastbach --ext  big  -t 30 --timesteps 32 -u 512 256 -d 256 -b 16
+```
 
+Use another database:
+```
+--dataset /home/gaetan/data/Dowland --ext dowland -t 30 --timesteps 32 -u 256 256 -d 256 -b 32
+```
 Default values load pre-trained DeepBach model and generate a chorale using sequential Gibbs sampling with 20000 iterations
