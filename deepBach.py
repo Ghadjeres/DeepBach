@@ -21,7 +21,7 @@ from data_utils import BEAT_SIZE, \
     seq_to_stream, BITS_FERMATA, \
     part_to_list, generator_from_raw_dataset, RAW_DATASET, all_features, \
     F_INDEX, to_fermata, seq_to_stream_slur, fermata_melody_to_fermata, \
-    seqs_to_stream, as_ps_to_as_pas, initialization
+    seqs_to_stream, as_ps_to_as_pas, initialization, as_pas_to_as_ps
 
 from fast_weights.fw.fast_weights_layer import FastWeights
 
@@ -606,7 +606,7 @@ def parallelGibbs(models=None, melody=None, fermatas_melody=None, sequence_lengt
         seq = initial_seq
         min_voice = 1
         # works only with reharmonization
-
+    # melody is given as pas !
     if melody is not None:
         seq[timesteps:-timesteps, 0] = melody[:, 0]
         mask = melody[:, 1] == 0
@@ -627,7 +627,8 @@ def parallelGibbs(models=None, melody=None, fermatas_melody=None, sequence_lengt
     # Main loop
     for iteration in tqdm(range(num_iterations)):
 
-        temperature = max(min_temperature, temperature * 0.99)  # Recuit
+        temperature = max(min_temperature, temperature * 0.9995)  # Recuit
+        print(temperature)
 
         time_indexes = {}
         probas = {}
@@ -1044,8 +1045,11 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', nargs='?',
                         help='path to dataset folder',
                         type=str, default='')
+    parser.add_argument('-r', '--reharmonization', nargs='?',
+                        help='reharmonization of a melody from the corpus identified by its id',
+                        type=int)
     args = parser.parse_args()
-    # print(args)
+    print(args)
 
     # datasets
     # change RAW_DATASET constant i argument is present
@@ -1099,6 +1103,13 @@ if __name__ == '__main__':
                                               np.zeros(21 * 4),
                                               np.ones(3 * 4))
                                              )
+    elif args.reharmonization:
+        # melody = as_pas_to_as_ps(X[args.reharmonization][0:1, :, :F_INDEX],
+        #                          min_pitches=min_pitches,
+        #                          max_pitches=max_pitches)[0]
+        melody = X[args.reharmonization][0, :, :F_INDEX]
+        num_voices = 3
+        fermatas_melody = X[args.reharmonization][0, :, F_INDEX]
     else:
         num_voices = 4
         melody = None

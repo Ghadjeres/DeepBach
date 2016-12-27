@@ -86,6 +86,11 @@ python3 deepBach.py -n fastbach --ext  big  -t 30 --timesteps 32 -u 512 256 -d 2
 
 Use another database:
 ```
---dataset /home/gaetan/data/Dowland --ext dowland -t 30 --timesteps 32 -u 256 256 -d 256 -b 32
+python3 deepBach.py --dataset /home/gaetan/data/Dowland --ext dowland -t 30 --timesteps 32 -u 256 256 -d 256 -b 32
+```
+
+Reharmonization of a melody from the training or testing set:
+```
+python3 deepBach.py -n skip   -p -i 40000 -r 25
 ```
 Default values load pre-trained DeepBach model and generate a chorale using sequential Gibbs sampling with 20000 iterations

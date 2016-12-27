@@ -16,7 +16,7 @@ SUBDIVISION = 4  # quarter note subdivision
 BITS_FERMATA = 2  # number of bits needed to encode fermata
 RANGE_FERMATA = 3  # 3 beats before fermatas
 SPACING_FERMATAS = 12  # in beats
-FERMATAS_LENGTH = 1  # in beats
+FERMATAS_LENGTH = 2  # in beats
 
 P_INDEX = 0  # pitch index in representation
 A_INDEX = 1  # articulation index in representation
