@@ -29,7 +29,7 @@ from fast_weights.fw.fast_weights_layer import FastWeights
 def generation(model_base_name, models, min_pitches, max_pitches, melody=None,
                initial_seq=None, temperature=1.0,
                fermatas_melody=None, parallel=False, batch_size_per_voice=8, num_iterations=None, sequence_length=160,
-               output_file=None):
+               output_file=None, pickled_dataset=RAW_DATASET):
     # Test by generating a sequence
 
     if parallel:
@@ -38,14 +38,15 @@ def generation(model_base_name, models, min_pitches, max_pitches, melody=None,
                             num_iterations=num_iterations, sequence_length=sequence_length,
                             min_pitches=min_pitches, max_pitches=max_pitches, temperature=temperature,
                             initial_seq=initial_seq, batch_size_per_voice=batch_size_per_voice,
-                            parallel_updates=True)
+                            parallel_updates=True, pickled_dataset=pickled_dataset)
 
     else:
         seq = gibbs(models=models, model_base_name=model_base_name,
                     melody=melody, fermatas_melody=fermatas_melody,
                     num_iterations=num_iterations, sequence_length=sequence_length,
                     min_pitches=min_pitches, max_pitches=max_pitches, temperature=temperature,
-                    initial_seq=initial_seq)
+                    initial_seq=initial_seq,
+                    pickled_dataset=pickled_dataset)
 
     # convert
     score = seq_to_stream_slur(np.transpose(seq, axes=(1, 0)),
@@ -451,14 +452,15 @@ def gibbs(models=None, melody=None, fermatas_melody=None, sequence_length=50, nu
           timesteps=16,
           model_base_name='models/raw_dataset/tmp/',
           num_voices=4, temperature=1., min_pitches=None,
-          max_pitches=None, initial_seq=None):
+          max_pitches=None, initial_seq=None,
+          pickled_dataset=RAW_DATASET):
     """
     samples from models in model_base_name
 
     """
 
-    dataset_name = RAW_DATASET
-    X, min_pitches, max_pitches, num_voices = pickle.load(open(RAW_DATASET, 'rb'))
+
+    X, min_pitches, max_pitches, num_voices = pickle.load(open(pickled_dataset, 'rb'))
 
     # load models if not
     if models is None:
@@ -568,12 +570,13 @@ def parallelGibbs(models=None, melody=None, fermatas_melody=None, sequence_lengt
                   timesteps=16,
                   model_base_name='models/raw_dataset/tmp/',
                   num_voices=4, temperature=1., min_pitches=None,
-                  max_pitches=None, initial_seq=None, batch_size_per_voice=16, parallel_updates=True):
+                  max_pitches=None, initial_seq=None, batch_size_per_voice=16, parallel_updates=True,
+                  pickled_dataset=RAW_DATASET):
     """
     samples from models in model_base_name
     """
 
-    X, min_pitches, max_pitches, num_voices = pickle.load(open(RAW_DATASET, 'rb'))
+    X, min_pitches, max_pitches, num_voices = pickle.load(open(pickled_dataset, 'rb'))
 
     # load models if not
     if models is None:
@@ -1135,4 +1138,5 @@ if __name__ == '__main__':
                      fermatas_melody=fermatas_melody, parallel=parallel, batch_size_per_voice=batch_size_per_voice,
                      num_iterations=num_iterations,
                      sequence_length=sequence_length,
-                     output_file=output_file)
+                     output_file=output_file,
+                     pickled_dataset=pickled_dataset)
