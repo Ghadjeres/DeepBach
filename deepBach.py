@@ -459,7 +459,6 @@ def gibbs(models=None, melody=None, fermatas_melody=None, sequence_length=50, nu
 
     """
 
-
     X, min_pitches, max_pitches, num_voices = pickle.load(open(pickled_dataset, 'rb'))
 
     # load models if not
@@ -759,7 +758,7 @@ def create_models(model_name=None, create_new=False, num_dense=200, num_units_ls
     for voice_index in range(4):
         # We only need one example for features dimensions
         gen = generator_from_raw_dataset(batch_size=batch_size, timesteps=timesteps,
-                                         voice_index=voice_index)
+                                         voice_index=voice_index, pickled_dataset=pickled_dataset)
 
         (left_features,
          central_features,
@@ -825,7 +824,7 @@ def load_models(model_base_name=None):
 def train_models(model_name,
                  samples_per_epoch,
                  num_epochs,
-                 nb_val_samples, timesteps):
+                 nb_val_samples, timesteps, pickled_dataset=RAW_DATASET):
     """
     Train models
 
@@ -854,7 +853,8 @@ def train_models(model_name,
                            in generator_from_raw_dataset(batch_size=batch_size,
                                                          timesteps=timesteps,
                                                          voice_index=voice_index,
-                                                         phase='train'
+                                                         phase='train',
+                                                         pickled_dataset=pickled_dataset
                                                          ))
 
         generator_val = (({'left_features': left_features,
@@ -877,7 +877,8 @@ def train_models(model_name,
                          in generator_from_raw_dataset(batch_size=batch_size,
                                                        timesteps=timesteps,
                                                        voice_index=voice_index,
-                                                       phase='train'
+                                                       phase='train',
+                                                       pickled_dataset=pickled_dataset
                                                        ))
 
         model_path_name = 'models/' + model_name + '_' + str(voice_index)
@@ -1129,13 +1130,15 @@ if __name__ == '__main__':
     # melody = None
 
     if not os.path.exists('models/' + model_name + '_3.yaml'):
-        create_models(model_name, create_new=overwrite, num_units_lstm=num_units_lstm, num_dense=num_dense)
+        create_models(model_name, create_new=overwrite, num_units_lstm=num_units_lstm, num_dense=num_dense,
+                      pickled_dataset=pickled_dataset)
     if train:
         models = train_models(model_name=model_name,
                               samples_per_epoch=samples_per_epoch,
                               nb_val_samples=nb_val_samples,
                               num_epochs=num_epochs,
-                              timesteps=timesteps)
+                              timesteps=timesteps,
+                              pickled_dataset=pickled_dataset)
     else:
         models = load_models(model_name)
 

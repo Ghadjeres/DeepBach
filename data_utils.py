@@ -43,10 +43,10 @@ def filter_file_list(file_list):
         c = converter.parse(file_name)
         # if len(c.parts) == NUM_VOICES and c.parts[0].id == 'Soprano':
         if len(c.parts) == NUM_VOICES:
-            # Retain only chorals with fermatas
+            # To retain only chorals with fermatas
+            # if len(list(filter(lambda n: len(n.expressions) == 1, c.parts[0].flat.notes))) > 0:
 
-            if len(list(filter(lambda n: len(n.expressions) == 1, c.parts[0].flat.notes))) > 0:
-                l.append(file_name)
+            l.append(file_name)
     return l
 
 
@@ -191,7 +191,7 @@ def chorale_to_input_with_fermata(chorale_file, voice_id=0):
     choral = converter.parse(chorale_file)
     part = choral.parts[voice_id]
     sop = choral.parts[0]
-    assert sop.id == 'Soprano'
+    # assert sop.id == 'Soprano'
     sop = part_to_list_with_fermata(sop)
     part = part_to_list_with_fermata(part)
     # copy fermatas
@@ -547,10 +547,11 @@ def make_raw_dataset(file_list, dataset_name, num_voices=4, transpose=False, min
                     transposed_input = inputs.copy()
                     transposed_input[:, :, P_INDEX] += num_semitones
                     X.append(transposed_input)
-        except AttributeError:
+        except (AttributeError, IndexError):
             pass
     dataset = (X, min_pitches, max_pitches, num_voices)
     pickle.dump(dataset, open(dataset_name, 'wb'), pickle.HIGHEST_PROTOCOL)
+    print(str(len(X)) + 'files written in ' + dataset_name)
 
 
 def make_datasets(file_list, dataset_names, voice_ids, MIN_PITCH, MAX_PITCH,
@@ -1086,7 +1087,7 @@ def all_features_from_pa_chorale_with_fermatas(chorale, voice_index, time_index,
 
 
 def generator_from_raw_dataset(batch_size, timesteps, voice_index,
-                               phase='train', percentage_train=0.8):
+                               phase='train', percentage_train=0.8, pickled_dataset=RAW_DATASET):
     """
      Returns a generator of
             (left_features,
@@ -1099,8 +1100,7 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
             where fermatas = (fermatas_left, central_fermatas, fermatas_right)
     """
 
-    dataset_name = RAW_DATASET
-    X, min_pitches, max_pitches, num_voices = pickle.load(open(dataset_name, 'rb'))
+    X, min_pitches, max_pitches, num_voices = pickle.load(open(pickled_dataset, 'rb'))
 
     # Set chorale_indices
     if phase == 'train':
