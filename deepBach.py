@@ -441,9 +441,9 @@ def skip_nofermata(num_features_lr, num_features_c, num_pitches, num_units_lstm=
     beats_left = Input(shape=(timesteps, BEAT_SIZE), name='beats_left')
 
     # embedding layer for left and right
-    embedding_left = Dense(input_dim=num_features_lr + BEAT_SIZE + BITS_FERMATA,
+    embedding_left = Dense(input_dim=num_features_lr + BEAT_SIZE,
                            output_dim=num_dense, name='embedding_left')
-    embedding_right = Dense(input_dim=num_features_lr + BEAT_SIZE + BITS_FERMATA,
+    embedding_right = Dense(input_dim=num_features_lr + BEAT_SIZE,
                             output_dim=num_dense, name='embedding_right')
 
     predictions_left = TimeDistributed(embedding_left)(merge((left_features,
@@ -490,7 +490,7 @@ def skip_nofermata(num_features_lr, num_features_c, num_pitches, num_units_lstm=
                                  return_sequences=return_sequences,
                                  name='lstm_right_' + str(stack_index)
                                  )(predictions_right)
-        # todo add relu
+
 
     # retain only last input for skip connections
     predictions_left_old = Lambda(lambda t: t[:, -1, :],
@@ -883,16 +883,16 @@ def create_models(model_name=None, create_new=False, num_dense=200, num_units_ls
                              num_features_c=central_features.shape[-1],
                              num_pitches=num_pitches[voice_index],
                              num_dense=num_dense, num_units_lstm=num_units_lstm)
-        elif 'skip' in model_name:
-            model = skip(num_features_lr=left_features.shape[-1],
-                         num_features_c=central_features.shape[-1],
-                         num_pitches=num_pitches[voice_index],
-                         num_dense=num_dense, num_units_lstm=num_units_lstm)
         elif 'skipnof' in model_name:
             model = skip_nofermata(num_features_lr=left_features.shape[-1],
                                    num_features_c=central_features.shape[-1],
                                    num_pitches=num_pitches[voice_index],
                                    num_dense=num_dense, num_units_lstm=num_units_lstm)
+        elif 'skip' in model_name:
+            model = skip(num_features_lr=left_features.shape[-1],
+                         num_features_c=central_features.shape[-1],
+                         num_pitches=num_pitches[voice_index],
+                         num_dense=num_dense, num_units_lstm=num_units_lstm)
         else:
             raise ValueError
 
@@ -937,17 +937,14 @@ def train_models(model_name,
                              'beat': beat,
                              'beats_left': beats_left,
                              'beats_right': beats_right,
-                             'fermatas_left': fermatas_left,
-                             'fermatas_right': fermatas_right,
-                             'central_fermata': central_fermata
                              },
                             {'pitch_prediction': labels})
                            for (left_features,
                                 central_features,
                                 right_features,
                                 (beats_left, beat, beats_right),
-                                labels,
-                                (fermatas_left, central_fermata, fermatas_right))
+                                labels)
+
                            in generator_from_raw_dataset(batch_size=batch_size,
                                                          timesteps=timesteps,
                                                          voice_index=voice_index,
@@ -960,18 +957,16 @@ def train_models(model_name,
                            'right_features': right_features,
                            'beat': beat,
                            'beats_left': beats_left,
-                           'beats_right': beats_right,
-                           'fermatas_left': fermatas_left,
-                           'fermatas_right': fermatas_right,
-                           'central_fermata': central_fermata
+                           'beats_right': beats_right
+
                            },
                           {'pitch_prediction': labels})
                          for (left_features,
                               central_features,
                               right_features,
                               (beats_left, beat, beats_right),
-                              labels,
-                              (fermatas_left, central_fermata, fermatas_right))
+                              labels)
+
                          in generator_from_raw_dataset(batch_size=batch_size,
                                                        timesteps=timesteps,
                                                        voice_index=voice_index,
