@@ -699,14 +699,12 @@ def as_ps_to_as_pas(chorale_as_ps, min_pitches, max_pitches):
 
 def chorale_to_onehot(chorale, num_pitches):
     """
-    chorale is a (num_voices, time) array of indexes
+    chorale is time major
     :param chorale:
     :param num_pitches:
     :return:
     """
-    # time major
-    chorale = np.transpose(chorale)
-    return np.vectorize(lambda time_slice: time_slice_to_onehot(time_slice, num_pitches))(chorale)
+    return np.array(list(map(lambda time_slice: time_slice_to_onehot(time_slice, num_pitches), chorale)))
 
 
 def time_slice_to_onehot(time_slice, num_pitches):
@@ -730,10 +728,11 @@ def all_features(chorale, voice_index, time_index, timesteps, num_pitches, num_v
     :return:
     """
     mask = np.array(voice_index == np.arange(num_voices), dtype=bool) == False
+    num_pitches = np.array(num_pitches)
 
     left_feature = chorale_to_onehot(chorale[time_index - timesteps:time_index, :], num_pitches=num_pitches)
 
-    right_feature = chorale_to_onehot(chorale[time_index + timesteps: time_index: -1, :])
+    right_feature = chorale_to_onehot(chorale[time_index + timesteps: time_index: -1, :], num_pitches=num_pitches)
 
     central_feature = time_slice_to_onehot(chorale[time_index, mask],
                                            num_pitches[mask])
@@ -921,9 +920,12 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
         extended_chorale = np.transpose(X[chorale_index])
         padding_dimensions = (timesteps,) + extended_chorale.shape[1:]
 
-        extended_chorale = np.concatenate((np.zeros(padding_dimensions),
+        start_symbols = np.array(list(map(lambda note2index: note2index[START_SYMBOL], note2indexes)))
+        end_symbols = np.array(list(map(lambda note2index: note2index[END_SYMBOL], note2indexes)))
+
+        extended_chorale = np.concatenate((np.full(padding_dimensions, start_symbols[: None]),
                                            extended_chorale,
-                                           np.zeros(padding_dimensions)),
+                                           np.full(padding_dimensions, end_symbols[: None])),
                                           axis=0)
         chorale_length = len(extended_chorale)
 

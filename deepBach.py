@@ -19,7 +19,7 @@ from tqdm import tqdm
 
 from data_utils import BEAT_SIZE, \
     seq_to_stream, BITS_FERMATA, \
-    part_to_list, generator_from_raw_dataset, RAW_DATASET, all_features, \
+    part_to_list, generator_from_raw_dataset, BACH_DATASET, all_features, \
     F_INDEX, to_fermata, seq_to_stream_slur, fermata_melody_to_fermata, \
     seqs_to_stream, as_ps_to_as_pas, initialization, as_pas_to_as_ps
 
@@ -29,7 +29,7 @@ from fast_weights.fw.fast_weights_layer import FastWeights
 def generation(model_base_name, models, min_pitches, max_pitches, timesteps, melody=None,
                initial_seq=None, temperature=1.0,
                fermatas_melody=None, parallel=False, batch_size_per_voice=8, num_iterations=None, sequence_length=160,
-               output_file=None, pickled_dataset=RAW_DATASET):
+               output_file=None, pickled_dataset=BACH_DATASET):
     # Test by generating a sequence
 
     if parallel:
@@ -551,7 +551,7 @@ def gibbs(models=None, melody=None, fermatas_melody=None, sequence_length=50, nu
           model_base_name='models/raw_dataset/tmp/',
           num_voices=4, temperature=1., min_pitches=None,
           max_pitches=None, initial_seq=None,
-          pickled_dataset=RAW_DATASET):
+          pickled_dataset=BACH_DATASET):
     """
     samples from models in model_base_name
 
@@ -667,7 +667,7 @@ def parallelGibbs(models=None, melody=None, fermatas_melody=None, sequence_lengt
                   model_base_name='models/raw_dataset/tmp/',
                   num_voices=4, temperature=1., min_pitches=None,
                   max_pitches=None, initial_seq=None, batch_size_per_voice=16, parallel_updates=True,
-                  pickled_dataset=RAW_DATASET):
+                  pickled_dataset=BACH_DATASET):
     """
     samples from models in model_base_name
     """
@@ -844,14 +844,15 @@ def save_model(model, model_name, yaml=True, overwrite=False):
 
 
 def create_models(model_name=None, create_new=False, num_dense=200, num_units_lstm=[200, 200],
-                  pickled_dataset=RAW_DATASET):
+                  pickled_dataset=BACH_DATASET):
     """
     Choose one model
     :param model_name:
     :return:
     """
 
-    _, min_pitches, max_pitches, num_voices = pickle.load(open(pickled_dataset, 'rb'))
+    _, _, index2notes, _ = pickle.load(open(pickled_dataset, 'rb'))
+    num_pitches = list(map(len, index2notes))
     for voice_index in range(4):
         # We only need one example for features dimensions
         gen = generator_from_raw_dataset(batch_size=batch_size, timesteps=timesteps,
@@ -861,42 +862,36 @@ def create_models(model_name=None, create_new=False, num_dense=200, num_units_ls
          central_features,
          right_features,
          beats,
-         labels, fermatas) = next(gen)
+         labels) = next(gen)
 
         if 'deepbach' in model_name:
             model = deepBach(num_features_lr=left_features.shape[-1],
                              num_features_c=central_features.shape[-1],
-                             num_pitches=max_pitches[voice_index] - min_pitches[voice_index] + 1
-                                         + 1,  # for continuation symbol
+                             num_pitches=num_pitches[voice_index],
                              num_dense=num_dense, num_units_lstm=num_units_lstm)
         elif 'maxent' in model_name:
             model = maxEnt(num_features_lr=left_features.shape[-1],
                            num_features_c=central_features.shape[-1],
-                           num_pitches=max_pitches[voice_index] - min_pitches[voice_index] + 1
-                                       + 1)  # for continuation symbol
+                           num_pitches=num_pitches)
         elif 'mlp' in model_name:
             model = mlp(num_features_lr=left_features.shape[-1],
                         num_features_c=central_features.shape[-1],
-                        num_pitches=max_pitches[voice_index] - min_pitches[voice_index] + 1
-                                    + 1,
-                        num_hidden=num_dense)  # for continuation symbol
+                        num_pitches=num_pitches[voice_index],
+                        num_hidden=num_dense)
         elif 'fastbach' in model_name:
             model = fastBach(num_features_lr=left_features.shape[-1],
                              num_features_c=central_features.shape[-1],
-                             num_pitches=max_pitches[voice_index] - min_pitches[voice_index] + 1
-                                         + 1,  # for continuation symbol
+                             num_pitches=num_pitches[voice_index],
                              num_dense=num_dense, num_units_lstm=num_units_lstm)
         elif 'skip' in model_name:
             model = skip(num_features_lr=left_features.shape[-1],
                          num_features_c=central_features.shape[-1],
-                         num_pitches=max_pitches[voice_index] - min_pitches[voice_index] + 1
-                                     + 1,  # for continuation symbol
+                         num_pitches=num_pitches[voice_index],
                          num_dense=num_dense, num_units_lstm=num_units_lstm)
         elif 'skipnof' in model_name:
             model = skip_nofermata(num_features_lr=left_features.shape[-1],
                                    num_features_c=central_features.shape[-1],
-                                   num_pitches=max_pitches[voice_index] - min_pitches[voice_index] + 1
-                                               + 1,  # for continuation symbol
+                                   num_pitches=num_pitches[voice_index],
                                    num_dense=num_dense, num_units_lstm=num_units_lstm)
         else:
             raise ValueError
@@ -927,7 +922,7 @@ def load_models(model_base_name=None):
 def train_models(model_name,
                  samples_per_epoch,
                  num_epochs,
-                 nb_val_samples, timesteps, pickled_dataset=RAW_DATASET):
+                 nb_val_samples, timesteps, pickled_dataset=BACH_DATASET):
     """
     Train models
 
@@ -1156,21 +1151,21 @@ if __name__ == '__main__':
     print(args)
 
     # datasets
-    # change RAW_DATASET constant i argument is present
+    # change BACH_DATASET constant i argument is present
     if args.dataset:
         dataset_path = args.dataset
         dataset_name = dataset_path.split('/')[-1]
         pickled_dataset = 'datasets/custom_dataset/' + dataset_name + '.pickle'
     else:
         dataset_path = None
-        pickled_dataset = RAW_DATASET
+        pickled_dataset = BACH_DATASET
 
     if not os.path.exists(pickled_dataset):
         initialization(dataset_path)
 
     # load dataset
-    X, min_pitches, max_pitches, num_voices = pickle.load(open(pickled_dataset,
-                                                               'rb'))
+    X, num_voices, index2notes, note2indexes = pickle.load(open(pickled_dataset,
+                                                                'rb'))
 
     timesteps = args.timesteps
     batch_size = args.batch_size_train
