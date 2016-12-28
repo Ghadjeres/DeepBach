@@ -13,9 +13,8 @@ from music21 import corpus, converter, stream, note, duration
 
 NUM_VOICES = 4
 
-SUBDIVISION = 2  # quarter note subdivision
-BEAT_SIZE = 2
-
+SUBDIVISION = 4  # quarter note subdivision
+BEAT_SIZE = 4
 
 BITS_FERMATA = 2  # number of bits needed to encode fermata
 RANGE_FERMATA = 3  # 3 beats before fermatas
@@ -26,29 +25,34 @@ P_INDEX = 0  # pitch index in representation
 A_INDEX = 1  # articulation index in representation
 F_INDEX = 2  # fermata index in representation
 
-
 OCTAVE = 12
 
-RAW_DATASET = 'datasets/raw_dataset/bach_chorales.pickle'
-RAW_DATASET_NO_TRANSPOSITION = 'datasets/' \
-                               'raw_dataset/' \
-                               'bach_chorales_no_transposition.pickle'
+BACH_DATASET = 'datasets/raw_dataset/bach_dataset.pickle'
 
 voice_ids = list(range(NUM_VOICES))  # soprano, alto, tenor, bass
 
+SLUR_SYMBOL = '__'
+START_SYMBOL = 'START'
+END_SYMBOL = 'END'
 
-def filter_file_list(file_list):
+
+def standard_name(note_or_rest):
+    if isinstance(note_or_rest, note.Note):
+        return note_or_rest.nameWithOctave
+    if isinstance(note_or_rest, note.Rest):
+        return note_or_rest.name
+    if isinstance(note_or_rest, str):
+        return note_or_rest
+
+
+def filter_file_list(file_list, num_voices=4):
     """
-    Only retain 4 voices chorales
+    Only retain num_voices voices chorales
     """
     l = []
     for file_name in file_list:
         c = converter.parse(file_name)
-        # if len(c.parts) == NUM_VOICES and c.parts[0].id == 'Soprano':
-        if len(c.parts) == NUM_VOICES:
-            # To retain only chorals with fermatas
-            # if len(list(filter(lambda n: len(n.expressions) == 1, c.parts[0].flat.notes))) > 0:
-
+        if len(c.parts) == num_voices:
             l.append(file_name)
     return l
 
@@ -150,29 +154,6 @@ def part_to_list_with_fermata(part):
     return t
 
 
-def chorale_to_input(chorale_file, voice_id=0):
-    """
-    Returns a list of [pitch, articulation]
-
-    """
-    part = converter.parse(chorale_file).parts[voice_id]
-    # assert part.id == 'Soprano'
-    return part_to_list(part)
-
-
-def chorale_to_inputs(chorale_file, num_voices=None):
-    """
-    Returns a numpy array [voices, time, (pitch, articulation)]
-    :param chorale_file:
-    :param num_voices:
-    :return:
-    """
-    mat = []
-    for voice_id in range(num_voices):
-        mat.append(chorale_to_input(chorale_file, voice_id=voice_id))
-    return np.array(mat)
-
-
 def chorale_to_inputs_with_fermata(chorale_file, num_voices=None):
     """
     Returns a numpy array [voices, time, (pitch, articulation, fermata)]
@@ -228,10 +209,10 @@ def to_beat(time, timesteps=None):
 
     if timesteps is None:
         return beat
-    left_beats = np.array(list(map(lambda x: p_to_onehot(x, 0, BEAT_SIZE-1),
+    left_beats = np.array(list(map(lambda x: p_to_onehot(x, 0, BEAT_SIZE - 1),
                                    np.arange(time - timesteps, time) % BEAT_SIZE)))
 
-    right_beats = np.array(list(map(lambda x: p_to_onehot(x, 0, BEAT_SIZE-1),
+    right_beats = np.array(list(map(lambda x: p_to_onehot(x, 0, BEAT_SIZE - 1),
                                     np.arange(time + timesteps, time, -1) % BEAT_SIZE)))
     return left_beats, np.array(beat), right_beats
 
@@ -513,208 +494,54 @@ def list_to_array(X):
     return np.concatenate(X).reshape((len(X),) + X[0].shape)
 
 
-def make_raw_dataset(file_list, dataset_name, num_voices=4, transpose=False, min_pitches=None, max_pitches=None,
-                     voice_ids=None):
-    """
-    :param file_list:
-    :param dataset_name:
-    :param num_voices:
-    :param transpose:
-    :return:  tuple (X, min_pitches, max_pitches, num_voices) where X is list of (num_voices, time, 3)
-    """
-    if min_pitches is None or max_pitches is None:
-        raise Exception('min_pitches and max_pitches must be provided as arguments. See compute_min_max_pitches')
-    # Choose whether to extract fermatas or not
-    to_inputs = chorale_to_inputs_with_fermata
+def chorale_to_inputs(chorale_file, num_voices, note2indexes):
+    chorale = converter.parse(chorale_file)
+    inputs = []
+    for voice_index in range(num_voices):
+        inputs.append(part_to_inputs(chorale.parts[voice_index], note2indexes[voice_index]))
+    return np.array(inputs)
 
-    X = []
-    for chorale_file in tqdm(file_list):
-        try:
-            inputs = to_inputs(chorale_file, num_voices=num_voices)
-            if not transpose:
-                X.append(inputs)
+
+def part_to_inputs(part, note2index):
+    length = int(part.duration.quarterLength * SUBDIVISION)  # in 16th notes
+    list_notes = part.flat.notes
+    num_notes = len(list_notes)
+    j = 0
+    i = 0
+    t = np.zeros((length, 2))
+    is_articulated = True
+    while i < length:
+        if j < num_notes - 1:
+            if list_notes[j + 1].offset > i / SUBDIVISION:
+                t[i, :] = [note2index[standard_name(list_notes[j])], is_articulated]
+                i += 1
+                is_articulated = False
             else:
-                # same transposition for every voice
-                max_transposition = 128
-                min_transposition = -128
-                for k, _ in enumerate(voice_ids):
-                    max_transposition = min(max_transposition,
-                                            int(max_pitches[k] - max(inputs[k, :, P_INDEX])))
+                j += 1
+                is_articulated = True
+        else:
+            t[i, :] = [note2index[standard_name(list_notes[j])], is_articulated]
+            i += 1
+            is_articulated = False
+    return list(map(lambda pa: pa[0] if pa[1] else note2index[SLUR_SYMBOL], t))
 
-                    min_transposition = max(min_transposition,
-                                            min_pitches[k] - int(min(inputs[k, :, P_INDEX])))
 
-                for num_semitones in range(min_transposition, max_transposition + 1):
-                    transposed_input = inputs.copy()
-                    transposed_input[:, :, P_INDEX] += num_semitones
-                    X.append(transposed_input)
+def make_dataset(files_path, dataset_name, num_voices=4, transpose=False):
+    # todo transposition
+    X = []
+    # todo folders
+    chorale_list = filter_file_list(corpus.getBachChorales(fileExtensions='xml'), num_voices=num_voices)
+    index2notes, note2indexes = create_index_dicts(chorale_list, num_voices=num_voices)
+    for chorale_file in tqdm(chorale_list):
+        try:
+            inputs = chorale_to_inputs(chorale_file, num_voices=num_voices, note2indexes=note2indexes)
+            # todo add fermatas here
+            X.append(inputs)
         except (AttributeError, IndexError):
             pass
-    dataset = (X, min_pitches, max_pitches, num_voices)
+    dataset = (X, num_voices, index2notes, note2indexes)
     pickle.dump(dataset, open(dataset_name, 'wb'), pickle.HIGHEST_PROTOCOL)
     print(str(len(X)) + 'files written in ' + dataset_name)
-
-
-def make_datasets(file_list, dataset_names, voice_ids, MIN_PITCH, MAX_PITCH,
-                  transpose=False, export_matlab=False):
-    """
-    MIN_PITCH and MAX_PITCH are arrays !
-    pickles a dataset
-    simple version, only returns list of chorals
-    """
-
-    assert len(dataset_names) == len(voice_ids)
-    print("Making datasets " + str(dataset_names))
-    inputs = []
-    X = []
-    y = []
-    for _ in range(len(dataset_names)):
-        inputs.append([])
-        X.append([])
-        y.append([])
-
-    for voice_index, voice_id in enumerate(voice_ids):
-        for file_index, file_name in enumerate(file_list):
-            inputs[voice_index].append(chorale_to_input(file_name, voice_id=voice_id))
-    if export_matlab:
-        import scipy.io as sio
-        sio.savemat('corpus4voices.mat', {'corpus': np.array(inputs)})
-
-    for voice_index, voice_id in enumerate(voice_ids):
-        for file_index, _ in enumerate(file_list):
-            try:
-                if not transpose:
-                    y[voice_index].append(inputs[voice_index][file_index][1:, :])
-                    X[voice_index].append(feature_to_onehot_feature(
-                        input_to_feature(inputs[voice_index][file_index])[:-1, :],
-                        MAX_PITCH[voice_index] - MIN_PITCH[voice_index] + 1,
-                        MIN_PITCH[voice_index], MAX_PITCH[voice_index]))
-                else:
-                    # same transposition for every voice
-                    max_transposition = 128
-                    min_transposition = -128
-                    for k, _ in enumerate(voice_ids):
-                        max_transposition = min(max_transposition,
-                                                int(MAX_PITCH[k] - max(inputs[k][file_index][:, 0])))
-
-                        min_transposition = max(min_transposition,
-                                                MIN_PITCH[k] - int(min(inputs[k][file_index][:, 0])))
-
-                    for num_semitones in range(min_transposition, max_transposition + 1):
-                        transposed_input = translate_y([inputs[voice_index][file_index]], num_semitones)[0]
-                        y[voice_index].append(transposed_input[1:, :])
-                        X[voice_index].append(feature_to_onehot_feature(
-                            inputs_to_feature([transposed_input], 0)[:-1, :],
-                            MAX_PITCH[voice_index] - MIN_PITCH[voice_index] + 1,
-                            MIN_PITCH[voice_index], MAX_PITCH[voice_index]))
-
-            except AttributeError:
-                print('print')
-
-    # Fusion features
-    num_chorals = len(X[voice_index])
-    XX = []
-    yy = []
-    for voice_index in range(len(voice_ids)):
-        XX.append([])
-        yy.append([])
-        for _ in range(num_chorals):
-            XX[voice_index].append([])
-            yy[voice_index].append([])
-
-    for voice_index, _ in enumerate(voice_ids):
-        for choral_index in range(num_chorals):
-            XX[voice_index][choral_index] = fusion_features(X, voice_index, choral_index)
-            yy[voice_index][choral_index] = y[voice_index][choral_index][:-1]
-
-    for voice_index, dataset_name in enumerate(dataset_names):
-        dataset = {'X': XX[voice_index], 'y': yy[voice_index],
-                   'min_pitch': MIN_PITCH[voice_index], 'max_pitch': MAX_PITCH[voice_index]
-                   }
-        pickle.dump(dataset, open(dataset_name, 'wb'), pickle.HIGHEST_PROTOCOL)
-
-
-def make_datasets_with_fermata(file_list, dataset_names, voice_ids, MIN_PITCH, MAX_PITCH,
-                               transpose=False, export_matlab=False):
-    """
-    MIN_PITCH and MAX_PITCH are arrays !
-    pickles a dataset
-    simple version, only returns list of chorals
-    :rtype: object
-    """
-
-    assert len(dataset_names) == len(voice_ids)
-    print("Making datasets " + str(dataset_names))
-    inputs = []
-    X = []
-    y = []
-    for _ in range(len(dataset_names)):
-        inputs.append([])
-        X.append([])
-        y.append([])
-
-    for voice_index, voice_id in enumerate(voice_ids):
-        for file_index, file_name in enumerate(file_list):
-            inputs[voice_index].append(chorale_to_input_with_fermata(file_name, voice_id=voice_id))
-    if export_matlab:
-        import scipy.io as sio
-
-        sio.savemat('corpus4voices.mat', {'corpus': np.array(inputs)})
-
-    for voice_index, voice_id in enumerate(voice_ids):
-        for file_index, _ in enumerate(file_list):
-            try:
-                if not transpose:
-                    # Discard fermatas for labels ( [: 2])
-                    y[voice_index].append(inputs[voice_index][file_index][1:, :2])
-                    X[voice_index].append(feature_to_onehot_feature(
-                        input_to_feature_with_fermata(inputs[voice_index][file_index], voice_index)[:-1, :],
-                        MAX_PITCH[voice_index] - MIN_PITCH[voice_index] + 1,
-                        MIN_PITCH[voice_index], MAX_PITCH[voice_index]))
-                else:
-                    # same transposition for every voice
-                    max_transposition = 128
-                    min_transposition = -128
-                    for k, _ in enumerate(voice_ids):
-                        max_transposition = min(max_transposition,
-                                                int(MAX_PITCH[k] - max(inputs[k][file_index][:, 0])))
-
-                        min_transposition = max(min_transposition,
-                                                MIN_PITCH[k] - int(min(inputs[k][file_index][:, 0])))
-
-                    for num_semitones in range(min_transposition, max_transposition + 1):
-                        transposed_input = translate_y([inputs[voice_index][file_index]], num_semitones)[0]
-                        # Discard fermatas for labels ( [: 2])
-                        y[voice_index].append(transposed_input[1:, :2])
-                        X[voice_index].append(feature_to_onehot_feature(
-                            inputs_to_feature_with_fermata([transposed_input], 0)[:-1, :],
-                            MAX_PITCH[voice_index] - MIN_PITCH[voice_index] + 1,
-                            MIN_PITCH[voice_index], MAX_PITCH[voice_index]))
-
-            except AttributeError:
-                print('print')
-
-    # Fusion features
-    num_chorals = len(X[voice_index])
-    XX = []
-    yy = []
-    for voice_index in range(len(voice_ids)):
-        XX.append([])
-        yy.append([])
-        for _ in range(num_chorals):
-            XX[voice_index].append([])
-            yy[voice_index].append([])
-
-    for voice_index, _ in enumerate(voice_ids):
-        for choral_index in range(num_chorals):
-            XX[voice_index][choral_index] = fusion_features_with_fermata(X, voice_index, choral_index)
-            yy[voice_index][choral_index] = y[voice_index][choral_index][:-1]
-
-    for voice_index, dataset_name in enumerate(dataset_names):
-        dataset = {'X': XX[voice_index], 'y': yy[voice_index],
-                   'min_pitch': MIN_PITCH[voice_index], 'max_pitch': MAX_PITCH[voice_index]
-                   }
-        pickle.dump(dataset, open(dataset_name, 'wb'), pickle.HIGHEST_PROTOCOL)
 
 
 def zero_padding(mat, size=16):
@@ -725,19 +552,6 @@ def zero_padding(mat, size=16):
                            np.zeros(zeros_shape)))
 
 
-def unpickle(pickle_file):
-    with open(pickle_file, 'rb') as f:
-        save = pickle.load(f)
-        X = save['X']
-        y = save['y']
-        min_pitch = save['min_pitch']
-        max_pitch = save['max_pitch']
-        del save  # hint to help gc free up memory
-        print('Number of chorales: ', len(X))
-        print('X, y:', X[0].shape, y[0].shape)
-        return X, y, min_pitch, max_pitch
-
-
 def convert_list_to_X(pitch_and_articulation_list, NUM_PITCHES, MIN_PITCH, MAX_PITCH, offset=0):
     """
     list of pitches, starting on offset
@@ -746,36 +560,6 @@ def convert_list_to_X(pitch_and_articulation_list, NUM_PITCHES, MIN_PITCH, MAX_P
     return feature_to_onehot_feature(
         input_to_feature(
             pitch_and_articulation_list, initial_beat=offset), NUM_PITCHES, MIN_PITCH, MAX_PITCH)
-
-
-# does not take articulation into account for the moment !
-def create_consecutive_batch_generator(X, y, BATCH_SIZE, TIMESTEPS, NUM_PITCHES, MIN_PITCH, MAX_PITCH):
-    """
-    X is a list of chorals
-    Returns input (BATCH_SIZE, TIMESTEPS, NUM_FEATURES),
-            labels (BATCH_SIZE, TIMESTEPS, NUM_PITCHES) (one hot encoded)
-    """
-    input = []
-    labels = []
-    batch = 0
-    time_index = 0
-    choral_index = np.random.randint(len(X))
-    while True:
-        if time_index + TIMESTEPS < y[choral_index].shape[0]:
-            # if there is a full batch
-            input.append(X[choral_index][time_index:time_index + TIMESTEPS, :])
-            labels.append(feature_to_onehot_feature(y[choral_index][time_index:time_index + TIMESTEPS, 0][:, None],
-                                                    NUM_PITCHES, MIN_PITCH, MAX_PITCH))  # Retain pitch
-            time_index += 1
-            batch += 1
-        else:
-            choral_index = np.random.randint(len(X))
-            time_index = 0
-        if batch == BATCH_SIZE:
-            yield np.array(input, dtype=np.float32), np.array(labels, dtype=np.int32)
-            batch = 0
-            input = []
-            labels = []
 
 
 def pa_to_onehot(pa, min_pitch, max_pitch):
@@ -826,6 +610,11 @@ def p_to_onehot(p, min_pitch, max_pitch):
     :return: np.array of shape (max_pitch - min_pitch + 1)
     """
     return np.array(p == np.arange(min_pitch, max_pitch + 1),
+                    dtype=np.float32)
+
+
+def to_onehot(index, num_indexes):
+    return np.array(index == np.arange(0, num_indexes),
                     dtype=np.float32)
 
 
@@ -908,50 +697,58 @@ def as_ps_to_as_pas(chorale_as_ps, min_pitches, max_pitches):
     return chorale_as_pas
 
 
-def chorale_to_onehot(chorale, min_pitches, max_pitches, chorale_as_pas=True, fermatas=True):
+def chorale_to_onehot(chorale, num_pitches):
     """
-    chorale must be of shape (time, num_voices, 3) if chorale_as_pas
-    else (time, num_voices)
-
-    :param min_pitches: number of different pitches in chorale for each voice
-
+    chorale is a (num_voices, time) array of indexes
+    :param chorale:
+    :param num_pitches:
+    :return:
     """
-    mat = []
-    if chorale_as_pas:
-        if fermatas:
-            print('must never go there')
-            for pafs in chorale:
-                mat.append(pafs_to_onehot(pafs, min_pitches, max_pitches))
-        else:
-            for pas in chorale:
-                mat.append(pas_to_onehot(pas, min_pitches, max_pitches))
-            return np.array(mat)
-    # if chorale is given with only pitches + slur_symbol
-    else:
-        for ps in chorale:
-            # Add slur_symbol
-            mat.append(ps_to_onehot(ps, min_pitches, max_pitches))
-        return np.array(mat)
+    # time major
+    chorale = np.transpose(chorale)
+    return np.vectorize(lambda time_slice: time_slice_to_onehot(time_slice, num_pitches))(chorale)
 
 
-def all_features(chorale, voice_index, time_index, timesteps, min_pitches, max_pitches, num_voices,
+def time_slice_to_onehot(time_slice, num_pitches):
+    l = []
+    for voice_index, voice in enumerate(time_slice):
+        l.append(to_onehot(voice, num_pitches[voice_index]))
+    return np.concatenate(l)
+
+
+def all_features(chorale, voice_index, time_index, timesteps, num_pitches, num_voices,
                  chorale_as_pas=True):
     """
-    Returns all features for voice voice_index at time time_index from chorale
-    shapes:
-    (time, voice, 3) if chorale_as pas
-    (time, voice) if not chorale_as_pas
+    chorale with time major
+    :param chorale:
+    :param voice_index:
+    :param time_index:
+    :param timesteps:
+    :param num_pitches:
+    :param num_voices:
+    :param chorale_as_pas:
+    :return:
     """
-    if chorale_as_pas:
+    mask = np.array(voice_index == np.arange(num_voices), dtype=bool) == False
 
-        return all_features_from_pa_chorale_with_fermatas(chorale, voice_index, time_index, timesteps, min_pitches,
-                                                          max_pitches, num_voices)
-    else:
-        # when chorale already contains slur_symbols
+    left_feature = chorale_to_onehot(chorale[time_index - timesteps:time_index, :], num_pitches=num_pitches)
 
-        return all_features_from_slur_chorale(chorale, voice_index, time_index, timesteps,
-                                              min_pitches, max_pitches,
-                                              num_voices)
+    right_feature = chorale_to_onehot(chorale[time_index + timesteps: time_index: -1, :])
+
+    central_feature = time_slice_to_onehot(chorale[time_index, mask],
+                                           num_pitches[mask])
+
+    # put timesteps=None to only have the current beat
+    beat = to_beat(time_index, timesteps=timesteps)
+
+    label = to_onehot(chorale[time_index, voice_index], num_indexes=num_pitches[voice_index])
+
+    return (np.array(left_feature),
+            np.array(central_feature),
+            np.array(right_feature),
+            beat,
+            np.array(label)
+            )
 
 
 def all_features_from_slur_chorale(chorale, voice_index, time_index, timesteps,
@@ -1088,7 +885,7 @@ def all_features_from_pa_chorale_with_fermatas(chorale, voice_index, time_index,
 
 
 def generator_from_raw_dataset(batch_size, timesteps, voice_index,
-                               phase='train', percentage_train=0.8, pickled_dataset=RAW_DATASET):
+                               phase='train', percentage_train=0.8, pickled_dataset=BACH_DATASET):
     """
      Returns a generator of
             (left_features,
@@ -1101,7 +898,8 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
             where fermatas = (fermatas_left, central_fermatas, fermatas_right)
     """
 
-    X, min_pitches, max_pitches, num_voices = pickle.load(open(pickled_dataset, 'rb'))
+    X, num_voices, index2notes, note2indexes = pickle.load(open(pickled_dataset, 'rb'))
+    num_pitches = list(map(lambda x: len(x), index2notes))
 
     # Set chorale_indices
     if phase == 'train':
@@ -1116,17 +914,13 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
     beats_right = []
     beats_left = []
     labels = []
-    fermatas_left = []
-    central_fermatas = []
-    fermatas_right = []
     batch = 0
 
     while True:
         chorale_index = np.random.choice(chorale_indices)
-        extended_chorale = np.transpose(X[chorale_index], axes=(1, 0, 2))
+        extended_chorale = np.transpose(X[chorale_index])
         padding_dimensions = (timesteps,) + extended_chorale.shape[1:]
 
-        # Add fermatas before start and after ending
         extended_chorale = np.concatenate((np.zeros(padding_dimensions),
                                            extended_chorale,
                                            np.zeros(padding_dimensions)),
@@ -1136,18 +930,13 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
         time_index = np.random.randint(timesteps, chorale_length - timesteps)
 
         features = all_features(chorale=extended_chorale, voice_index=voice_index, time_index=time_index,
-                                timesteps=timesteps, min_pitches=min_pitches, max_pitches=max_pitches,
+                                timesteps=timesteps, num_pitches=num_pitches,
                                 num_voices=num_voices, chorale_as_pas=True)
 
         (left_feature, central_feature, right_feature,
          (beat_left, beat, beat_right),
-         label,
-         (fermata_left, central_fermata, fermata_right)
+         label
          ) = features
-
-        fermatas_left.append(fermata_left)
-        fermatas_right.append(fermata_right)
-        central_fermatas.append(central_fermata)
 
         left_features.append(left_feature)
         right_features.append(right_feature)
@@ -1168,11 +957,6 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
                              np.array(beats_right, dtype=np.float32)
                              ),
                             np.array(labels, dtype=np.float32))
-            # add fermatas
-            next_element += ((np.array(fermatas_left, dtype=np.float32),
-                              np.array(central_fermatas, dtype=np.float32),
-                              np.array(fermatas_right, dtype=np.float32))
-                             ,)
 
             yield next_element
 
@@ -1185,9 +969,7 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
             beats_left = []
             beats_right = []
             labels = []
-            fermatas_left = []
-            fermatas_right = []
-            central_fermatas = []
+
 
 
 def create_batch_generator(X, y, BATCH_SIZE, TIMESTEPS,
@@ -1365,45 +1147,6 @@ def create_batch_generator_one_hot(X, y, BATCH_SIZE, TIMESTEPS, NUM_PITCHES, MIN
             labels = []
 
 
-def create_batch_generator_one_hot_full(X, y, BATCH_SIZE, TIMESTEPS, NUM_PITCHES, MIN_PITCH, MAX_PITCH):
-    '''
-    X is a list of chorals
-    Returns (input (BATCH_SIZE, TIMESTEPS, NUM_FEATURES),
-            labels (BATCH_SIZE, TIMESTEPS, num_pitches),
-            replayed (BATCH_SIZE, TIMESTEPS, 2))
-
-    :param X:
-    :param y:
-    :param BATCH_SIZE:
-    :param TIMESTEPS:
-    :param NUM_PITCHES:
-    :param MIN_PITCH:
-    :param MAX_PITCH:
-    '''
-    input = []
-    labels = []
-    replayed = []
-    batch = 0
-    while True:
-        choral_index = np.random.randint(len(X))
-        time_index = np.random.randint(y[choral_index].shape[0] - TIMESTEPS)
-        input.append(X[choral_index][time_index:time_index + TIMESTEPS, :])
-        labels.append(feature_to_onehot_feature(y[choral_index][time_index:time_index + TIMESTEPS, 0][:, None],
-                                                NUM_PITCHES, MIN_PITCH, MAX_PITCH))  # Retain pitch
-        replayed.append(feature_to_onehot_feature(y[choral_index][time_index:time_index + TIMESTEPS, 1][:, None],
-                                                  2, 0, 1))  # Retain articulation
-        batch += 1
-        # if there is a full batch
-        if batch == BATCH_SIZE:
-            yield (np.array(input, dtype=np.float32),
-                   np.array(labels, dtype=np.int32),
-                   np.array(replayed, dtype=np.int32))
-            batch = 0
-            input = []
-            labels = []
-            replayed = []
-
-
 def create_generator_one_hot(X, y, TIMESTEPS, NUM_PITCHES, MIN_PITCH, MAX_PITCH):
     """
     X is a list of chorals
@@ -1536,6 +1279,45 @@ def seq_to_stream_slur(seq, min_pitches=None, max_pitches=None):
     return score
 
 
+def create_index_dicts(chorale_list, num_voices=4):
+    """
+    Returns two lists (index2notes, note2indexes) of size num_voices containing dictionaries
+    :param chorale_list:
+    :param num_voices:
+    :param min_pitches:
+    :param max_pitches:
+    :return:
+    """
+    # store all notes
+    voice_ranges = []
+    for voice_index in range(num_voices):
+        voice_range = set()
+        for chorale_path in chorale_list:
+            # todo transposition
+            chorale = converter.parse(chorale_path)
+            part = chorale.parts[voice_index].flat
+            for n in part.notesAndRests:
+                voice_range.add(standard_name(n))
+        # add additional symbols
+        voice_range.add(SLUR_SYMBOL)
+        voice_range.add(START_SYMBOL)
+        voice_range.add(END_SYMBOL)
+        voice_ranges.append(voice_range)
+    # create tables
+    index2notes = []
+    note2indexes = []
+    for voice_index in range(num_voices):
+        l = list(voice_ranges[voice_index])
+        index2note = {}
+        note2index = {}
+        for k, n in enumerate(l):
+            index2note.update({k: n})
+            note2index.update({n: k})
+        index2notes.append(index2note)
+        note2indexes.append(note2index)
+    return index2notes, note2indexes
+
+
 def initialization(dataset_path=None):
     from glob import glob
     print('Creating dataset')
@@ -1544,27 +1326,16 @@ def initialization(dataset_path=None):
         pickled_dataset = 'datasets/custom_dataset/' + dataset_path.split('/')[-1] + '.pickle'
     else:
         chorale_list = filter_file_list(corpus.getBachChorales(fileExtensions='xml'))
-        pickled_dataset = RAW_DATASET
+        pickled_dataset = BACH_DATASET
 
     min_pitches, max_pitches = compute_min_max_pitches(chorale_list, voices=voice_ids)
 
-    make_raw_dataset(chorale_list, pickled_dataset,
-                     num_voices=len(voice_ids),
-                     transpose=True,
-                     min_pitches=min_pitches, max_pitches=max_pitches,
-                     voice_ids=voice_ids)
+    make_dataset(chorale_list, pickled_dataset,
+                 num_voices=len(voice_ids),
+                 transpose=False)
 
 
 if __name__ == '__main__':
-    chorale_list = filter_file_list(corpus.getBachChorales(fileExtensions='xml'))
-
-    min_pitches, max_pitches = compute_min_max_pitches(chorale_list, voices=voice_ids)
-
-    # make_raw_dataset(chorale_list, RAW_DATASET,
-    #                  num_voices=len(voice_ids),
-    #                  transpose=True,
-    #                  min_pitches=min_pitches, max_pitches=max_pitches,
-    #                  voice_ids=voice_ids)
-    make_raw_dataset(chorale_list, RAW_DATASET_NO_TRANSPOSITION, num_voices=4, transpose=False,
-                     min_pitches=min_pitches, max_pitches=max_pitches)
+    num_voices = 4
+    make_dataset(None, BACH_DATASET, num_voices=4, transpose=False)
     exit()
