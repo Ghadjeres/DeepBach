@@ -93,4 +93,13 @@ Reharmonization of a melody from the training or testing set:
 ```
 python3 deepBach.py -n skip   -p -i 40000 -r 25
 ```
+
+Ravenscroft: (BEAT_SIZE and SUBDIVISION constants set to 2)
+```
+
+python3 deepBach.py -n skip  --ext ravenscroches  --dataset /home/gaetan/data/RavenscroftMidiMt -p -l 300 -i 50000
+```
+
+
+
 Default values load pre-trained DeepBach model and generate a chorale using sequential Gibbs sampling with 20000 iterations
