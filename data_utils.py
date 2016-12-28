@@ -12,7 +12,11 @@ import numpy as np
 from music21 import corpus, converter, stream, note, duration
 
 NUM_VOICES = 4
-SUBDIVISION = 4  # quarter note subdivision
+
+SUBDIVISION = 2  # quarter note subdivision
+BEAT_SIZE = 2
+
+
 BITS_FERMATA = 2  # number of bits needed to encode fermata
 RANGE_FERMATA = 3  # 3 beats before fermatas
 SPACING_FERMATAS = 12  # in beats
@@ -22,7 +26,6 @@ P_INDEX = 0  # pitch index in representation
 A_INDEX = 1  # articulation index in representation
 F_INDEX = 2  # fermata index in representation
 
-BEAT_SIZE = 4
 
 OCTAVE = 12
 
@@ -220,16 +223,16 @@ def to_beat(time, timesteps=None):
 
     IMPORTANT, right_beats is REVERSED
     """
-    beat = [0] * 4
-    beat[time % 4] = 1
+    beat = [0] * BEAT_SIZE
+    beat[time % BEAT_SIZE] = 1
 
     if timesteps is None:
         return beat
-    left_beats = np.array(list(map(lambda x: p_to_onehot(x, 0, 3),
-                                   np.arange(time - timesteps, time) % 4)))
+    left_beats = np.array(list(map(lambda x: p_to_onehot(x, 0, BEAT_SIZE-1),
+                                   np.arange(time - timesteps, time) % BEAT_SIZE)))
 
-    right_beats = np.array(list(map(lambda x: p_to_onehot(x, 0, 3),
-                                    np.arange(time + timesteps, time, -1) % 4)))
+    right_beats = np.array(list(map(lambda x: p_to_onehot(x, 0, BEAT_SIZE-1),
+                                    np.arange(time + timesteps, time, -1) % BEAT_SIZE)))
     return left_beats, np.array(beat), right_beats
 
 
@@ -407,9 +410,8 @@ def fusion_features(Xs, voice_index, file_index=None):
         total_features = 0
         # X[voice_index][file_index] [t, features]
         for X in Xs:
-            # WARNING 4 STANDS FOR THE NUMBER OF BITS USED BY THE BEAT REPRESENTATION
-            total_features += X[file_index].shape[1] - 4
-        total_features += 4  # Because we keep one beat
+            total_features += X[file_index].shape[1] - BEAT_SIZE
+        total_features += BEAT_SIZE  # Because we keep one beat
         fusion = np.zeros((Xs[voice_index][file_index].shape[0] - 1, total_features))
 
         for k, vect in enumerate(Xs[voice_index][file_index][:-1, :]):
@@ -417,11 +419,11 @@ def fusion_features(Xs, voice_index, file_index=None):
             for var_voice_index, X in enumerate(Xs):
                 feature = X[file_index]
                 if var_voice_index < voice_index:
-                    fusion[k, i:i + feature.shape[1] - 4] = feature[k + 1, :-4]
-                    i += feature.shape[1] - 4
+                    fusion[k, i:i + feature.shape[1] - BEAT_SIZE] = feature[k + 1, :-BEAT_SIZE]
+                    i += feature.shape[1] - BEAT_SIZE
                 elif var_voice_index > voice_index:
-                    fusion[k, i:i + feature.shape[1] - 4] = feature[k, :-4]
-                    i += feature.shape[1] - 4
+                    fusion[k, i:i + feature.shape[1] - BEAT_SIZE] = feature[k, :-BEAT_SIZE]
+                    i += feature.shape[1] - BEAT_SIZE
             # original features at the end
             fusion[k, i:] = vect
             assert i + len(vect) == total_features
@@ -431,10 +433,9 @@ def fusion_features(Xs, voice_index, file_index=None):
         total_features = 0
         # X[voice_index][file_index] [t, features]
         for X in Xs:
-            ### WARNING 4 STANDS FOR THE NUMBER OF BITS USED BY THE BEAT REPRESENTATION
-            total_features += X.shape[1] - 4
+            total_features += X.shape[1] - BEAT_SIZE
             # print(X[file_index].shape[1])
-        total_features += 4  # Because we keep one beat
+        total_features += BEAT_SIZE  # Because we keep one beat
         fusion = np.zeros((Xs[voice_index].shape[0] - 1, total_features))
 
         for k, vect in enumerate(Xs[voice_index][:-1, :]):
@@ -442,11 +443,11 @@ def fusion_features(Xs, voice_index, file_index=None):
             for var_voice_index, X in enumerate(Xs):
                 feature = X
                 if var_voice_index < voice_index:
-                    fusion[k, i:i + feature.shape[1] - 4] = feature[k + 1, :-4]
-                    i += feature.shape[1] - 4
+                    fusion[k, i:i + feature.shape[1] - BEAT_SIZE] = feature[k + 1, :-BEAT_SIZE]
+                    i += feature.shape[1] - BEAT_SIZE
                 elif var_voice_index > voice_index:
-                    fusion[k, i:i + feature.shape[1] - 4] = feature[k, :-4]
-                    i += feature.shape[1] - 4
+                    fusion[k, i:i + feature.shape[1] - BEAT_SIZE] = feature[k, :-BEAT_SIZE]
+                    i += feature.shape[1] - BEAT_SIZE
             # original features at the end
             fusion[k, i:] = vect
             assert i + len(vect) == total_features
