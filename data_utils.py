@@ -13,8 +13,8 @@ from music21 import corpus, converter, stream, note, duration
 
 NUM_VOICES = 4
 
-SUBDIVISION = 4  # quarter note subdivision
-BEAT_SIZE = 4
+SUBDIVISION = 2  # quarter note subdivision
+BEAT_SIZE = 2
 
 BITS_FERMATA = 2  # number of bits needed to encode fermata
 RANGE_FERMATA = 3  # 3 beats before fermatas
@@ -535,11 +535,10 @@ def part_to_inputs(part, note2index):
     return list(map(lambda pa: pa[0] if pa[1] else note2index[SLUR_SYMBOL], t))
 
 
-def make_dataset(files_path, dataset_name, num_voices=4, transpose=False):
+def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False):
     # todo transposition
     X = []
     # todo folders
-    chorale_list = filter_file_list(corpus.getBachChorales(fileExtensions='xml'), num_voices=num_voices)
     index2notes, note2indexes = create_index_dicts(chorale_list, num_voices=num_voices)
     for chorale_file in tqdm(chorale_list):
         try:
