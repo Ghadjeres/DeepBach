@@ -11,7 +11,7 @@ from tqdm import tqdm
 import numpy as np
 from music21 import corpus, converter, stream, note, duration
 
-NUM_VOICES = 5
+NUM_VOICES = 4
 
 SUBDIVISION = 4  # quarter note subdivision
 BEAT_SIZE = 4
@@ -43,6 +43,7 @@ def standard_name(note_or_rest):
         return note_or_rest.name
     if isinstance(note_or_rest, str):
         return note_or_rest
+
 
 def standard_note(note_or_rest_string):
     if note_or_rest_string == 'rest':
@@ -543,7 +544,6 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False):
     for chorale_file in tqdm(chorale_list):
         try:
             inputs = chorale_to_inputs(chorale_file, num_voices=num_voices, note2indexes=note2indexes)
-            print(chorale_file, inputs.shape)
             # todo add fermatas here
             X.append(inputs)
         except (AttributeError, IndexError):
@@ -980,7 +980,6 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
             labels = []
 
 
-
 def create_batch_generator(X, y, BATCH_SIZE, TIMESTEPS,
                            NUM_PITCHES, MIN_PITCH, MAX_PITCH,
                            y_onehot=True, phase='train', percentage_train=0.8):
@@ -1256,10 +1255,6 @@ def seqs_to_stream(seqs):
 
 
 def indexed_chorale_to_score(seq, pickled_dataset):
-    """
-    :param seq: list of pitches where max_pitch + 1 stands for the slur_symbol
-    :return:
-    """
     _, _, index2notes, note2indexes = pickle.load(open(pickled_dataset, 'rb'))
     num_pitches = list(map(len, index2notes))
     slur_indexes = list(map(lambda d: d[SLUR_SYMBOL], note2indexes))
@@ -1331,7 +1326,8 @@ def initialization(dataset_path=None):
     from glob import glob
     print('Creating dataset')
     if dataset_path:
-        chorale_list = filter_file_list(glob(dataset_path + '/*.mid') + glob(dataset_path + '/*.xml'), num_voices=NUM_VOICES)
+        chorale_list = filter_file_list(glob(dataset_path + '/*.mid') + glob(dataset_path + '/*.xml'),
+                                        num_voices=NUM_VOICES)
         pickled_dataset = 'datasets/custom_dataset/' + dataset_path.split('/')[-1] + '.pickle'
     else:
         chorale_list = filter_file_list(corpus.getBachChorales(fileExtensions='xml'))

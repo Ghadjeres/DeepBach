@@ -712,7 +712,7 @@ def parallelGibbs(models=None, melody=None, sequence_length=50, num_iterations=1
     # Main loop
     for iteration in tqdm(range(num_iterations)):
 
-        temperature = max(min_temperature, temperature * 0.999)  # Recuit
+        temperature = max(min_temperature, temperature * 0.9999)  # Recuit
         print(temperature)
 
         time_indexes = {}
