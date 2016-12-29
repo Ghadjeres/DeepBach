@@ -44,6 +44,15 @@ def standard_name(note_or_rest):
     if isinstance(note_or_rest, str):
         return note_or_rest
 
+def standard_note(note_or_rest_string):
+    if note_or_rest_string == 'rest':
+        return note.Rest()
+    # treat other additional symbols as rests
+    if note_or_rest_string == START_SYMBOL or note_or_rest_string == END_SYMBOL:
+        return note.Rest()
+    else:
+        return note.Note(note_or_rest_string)
+
 
 def filter_file_list(file_list, num_voices=4):
     """
@@ -714,8 +723,7 @@ def time_slice_to_onehot(time_slice, num_pitches):
     return np.concatenate(l)
 
 
-def all_features(chorale, voice_index, time_index, timesteps, num_pitches, num_voices,
-                 chorale_as_pas=True):
+def all_features(chorale, voice_index, time_index, timesteps, num_pitches, num_voices):
     """
     chorale with time major
     :param chorale:
@@ -724,7 +732,6 @@ def all_features(chorale, voice_index, time_index, timesteps, num_pitches, num_v
     :param timesteps:
     :param num_pitches:
     :param num_voices:
-    :param chorale_as_pas:
     :return:
     """
     mask = np.array(voice_index == np.arange(num_voices), dtype=bool) == False
@@ -933,7 +940,7 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
 
         features = all_features(chorale=extended_chorale, voice_index=voice_index, time_index=time_index,
                                 timesteps=timesteps, num_pitches=num_pitches,
-                                num_voices=num_voices, chorale_as_pas=True)
+                                num_voices=num_voices)
 
         (left_feature, central_feature, right_feature,
          (beat_left, beat, beat_right),
@@ -1248,11 +1255,15 @@ def seqs_to_stream(seqs):
     return score
 
 
-def seq_to_stream_slur(seq, min_pitches=None, max_pitches=None):
+def indexed_chorale_to_score(seq, pickled_dataset):
     """
     :param seq: list of pitches where max_pitch + 1 stands for the slur_symbol
     :return:
     """
+    _, _, index2notes, note2indexes = pickle.load(open(pickled_dataset, 'rb'))
+    num_pitches = list(map(len, index2notes))
+    slur_indexes = list(map(lambda d: d[SLUR_SYMBOL], note2indexes))
+
     score = stream.Score()
     for voice_index, v in enumerate(seq):
         part = stream.Part(id='part' + str(voice_index))
@@ -1260,18 +1271,14 @@ def seq_to_stream_slur(seq, min_pitches=None, max_pitches=None):
         f = note.Rest()
         for k, n in enumerate(v):
             # if it is a played note
-            if n <= max_pitches[voice_index]:
+            if not n == slur_indexes[voice_index]:
                 # add previous note
                 if dur > 0:
                     f.duration = duration.Duration(dur / SUBDIVISION)
                     part.append(f)
 
                 dur = 1
-                if n == 0:
-                    f = note.Rest()
-                else:
-                    f = note.Note()
-                    f.pitch.midi = n
+                f = standard_note(index2notes[voice_index][n])
             else:
                 dur += 1
         # add last note

@@ -20,13 +20,13 @@ from tqdm import tqdm
 from data_utils import BEAT_SIZE, \
     seq_to_stream, BITS_FERMATA, \
     part_to_list, generator_from_raw_dataset, BACH_DATASET, all_features, \
-    F_INDEX, to_fermata, seq_to_stream_slur, fermata_melody_to_fermata, \
-    seqs_to_stream, as_ps_to_as_pas, initialization, as_pas_to_as_ps
+    F_INDEX, to_fermata, indexed_chorale_to_score, fermata_melody_to_fermata, \
+    seqs_to_stream, as_ps_to_as_pas, initialization, as_pas_to_as_ps, START_SYMBOL, END_SYMBOL, part_to_inputs
 
 from fast_weights.fw.fast_weights_layer import FastWeights
 
 
-def generation(model_base_name, models, min_pitches, max_pitches, timesteps, melody=None,
+def generation(model_base_name, models, num_pitches, timesteps, melody=None,
                initial_seq=None, temperature=1.0,
                fermatas_melody=None, parallel=False, batch_size_per_voice=8, num_iterations=None, sequence_length=160,
                output_file=None, pickled_dataset=BACH_DATASET):
@@ -34,25 +34,26 @@ def generation(model_base_name, models, min_pitches, max_pitches, timesteps, mel
 
     if parallel:
         seq = parallelGibbs(models=models, model_base_name=model_base_name,
-                            melody=melody, timesteps=timesteps, fermatas_melody=fermatas_melody,
+                            melody=melody, timesteps=timesteps,
                             num_iterations=num_iterations, sequence_length=sequence_length,
-                            min_pitches=min_pitches, max_pitches=max_pitches, temperature=temperature,
+                            temperature=temperature,
                             initial_seq=initial_seq, batch_size_per_voice=batch_size_per_voice,
                             parallel_updates=True, pickled_dataset=pickled_dataset)
 
     else:
+        # todo refactor
         seq = gibbs(models=models, model_base_name=model_base_name,
                     timesteps=timesteps,
                     melody=melody, fermatas_melody=fermatas_melody,
                     num_iterations=num_iterations, sequence_length=sequence_length,
-                    min_pitches=min_pitches, max_pitches=max_pitches, temperature=temperature,
+                    temperature=temperature,
                     initial_seq=initial_seq,
                     pickled_dataset=pickled_dataset)
 
     # convert
-    score = seq_to_stream_slur(np.transpose(seq, axes=(1, 0)),
-                               min_pitches, max_pitches
-                               )
+    score = indexed_chorale_to_score(np.transpose(seq, axes=(1, 0)),
+                                     pickled_dataset=pickled_dataset
+                                     )
 
     # save as MIDI file
     if output_file:
@@ -491,7 +492,6 @@ def skip_nofermata(num_features_lr, num_features_c, num_pitches, num_units_lstm=
                                  name='lstm_right_' + str(stack_index)
                                  )(predictions_right)
 
-
     # retain only last input for skip connections
     predictions_left_old = Lambda(lambda t: t[:, -1, :],
                                   output_shape=lambda input_shape: (input_shape[0], input_shape[-1])
@@ -617,8 +617,7 @@ def gibbs(models=None, melody=None, fermatas_melody=None, sequence_length=50, nu
          central_feature,
          right_feature,
          (beats_left, beat, beats_right),
-         label) = all_features(seq, voice_index, time_index, timesteps, min_pitches, max_pitches, num_voices,
-                               chorale_as_pas=False)
+         label) = all_features(seq, voice_index, time_index, timesteps, min_pitches, max_pitches, chorale_as_pas=False)
 
         input_features = {'left_features': left_feature[None, :, :],
                           'central_features': central_feature[None, :],
@@ -662,17 +661,17 @@ def gibbs(models=None, melody=None, fermatas_melody=None, sequence_length=50, nu
     return seq[timesteps:-timesteps, :]
 
 
-def parallelGibbs(models=None, melody=None, fermatas_melody=None, sequence_length=50, num_iterations=1000,
+def parallelGibbs(models=None, melody=None, sequence_length=50, num_iterations=1000,
                   timesteps=16,
                   model_base_name='models/raw_dataset/tmp/',
-                  num_voices=4, temperature=1., min_pitches=None,
-                  max_pitches=None, initial_seq=None, batch_size_per_voice=16, parallel_updates=True,
+                  num_voices=4, temperature=1., initial_seq=None, batch_size_per_voice=16, parallel_updates=True,
                   pickled_dataset=BACH_DATASET):
     """
     samples from models in model_base_name
     """
 
-    X, min_pitches, max_pitches, num_voices = pickle.load(open(pickled_dataset, 'rb'))
+    X, num_voices, index2notes, note2indexes = pickle.load(open(pickled_dataset, 'rb'))
+    num_pitches = list(map(len, index2notes))
 
     # load models if not
     if models is None:
@@ -686,36 +685,25 @@ def parallelGibbs(models=None, melody=None, fermatas_melody=None, sequence_lengt
     if melody is not None:
         sequence_length = len(melody)
 
-    if fermatas_melody is not None:
-        sequence_length = len(fermatas_melody)
-        if melody is not None:
-            assert len(melody) == len(fermatas_melody)
-
     seq = np.zeros(shape=(2 * timesteps + sequence_length, num_voices))
     for expert_index in range(num_voices):
-        # Add slur_symbol
-        seq[timesteps:-timesteps, expert_index] = np.random.random_integers(min_pitches[expert_index],
-                                                                            max_pitches[expert_index] + 1,
-                                                                            size=sequence_length)
+        # Add start and end symbol + random init
+        seq[:timesteps, expert_index] = [note2indexes[expert_index][START_SYMBOL]] * timesteps
+        seq[timesteps:-timesteps, expert_index] = np.random.randint(num_pitches[expert_index],
+                                                                    size=sequence_length)
+
+        seq[-timesteps:, expert_index] = [note2indexes[expert_index][END_SYMBOL]] * timesteps
 
     if initial_seq is not None:
         seq = initial_seq
         min_voice = 1
         # works only with reharmonization
-    # melody is given as pas !
+
     if melody is not None:
-        seq[timesteps:-timesteps, 0] = melody[:, 0]
-        mask = melody[:, 1] == 0
-        seq[timesteps:-timesteps, 0][mask] = max_pitches[0] + 1
+        seq[timesteps:-timesteps, 0] = melody
         min_voice = 1
     else:
         min_voice = 0
-
-    if fermatas_melody is not None:
-        fermatas_melody = np.concatenate((np.zeros((timesteps,)),
-                                          fermatas_melody,
-                                          np.zeros((timesteps,)))
-                                         )
 
     min_temperature = temperature
     temperature = 1.5
@@ -742,8 +730,7 @@ def parallelGibbs(models=None, melody=None, fermatas_melody=None, sequence_lengt
                  central_feature,
                  right_feature,
                  (beats_left, beat, beats_right),
-                 label) = all_features(seq, voice_index, time_index, timesteps, min_pitches, max_pitches, num_voices,
-                                       chorale_as_pas=False)
+                 label) = all_features(seq, voice_index, time_index, timesteps, num_pitches, num_voices)
 
                 input_features = {'left_features': left_feature[:, :],
                                   'central_features': central_feature[:],
@@ -752,24 +739,6 @@ def parallelGibbs(models=None, melody=None, fermatas_melody=None, sequence_lengt
                                   'beats_left': beats_left[:, :],
                                   'beats_right': beats_right[:, :]}
 
-                # add fermatas evenly spaced
-                if fermatas_melody is None:
-                    (fermatas_left,
-                     central_fermata,
-                     fermatas_right) = to_fermata(time_index, timesteps=timesteps)
-                    input_features.update({'fermatas_left': fermatas_left[:, :],
-                                           'central_fermata': central_fermata[:],
-                                           'fermatas_right': fermatas_right[:, :]
-                                           })
-                else:
-                    (fermatas_left,
-                     central_fermata,
-                     fermatas_right) = fermata_melody_to_fermata(time_index, timesteps=timesteps,
-                                                                 fermatas_melody=fermatas_melody)
-                    input_features.update({'fermatas_left': fermatas_left[:, :],
-                                           'central_fermata': central_fermata[:],
-                                           'fermatas_right': fermatas_right[:, :]
-                                           })
                 # list of dicts: predict need dict of numpy arrays
                 batch_input_features.append(input_features)
 
@@ -790,7 +759,7 @@ def parallelGibbs(models=None, melody=None, fermatas_melody=None, sequence_lengt
                     probas_pitch = np.exp(probas_pitch) / np.sum(np.exp(probas_pitch)) - 1e-7
 
                     # pitch can include slur_symbol
-                    pitch = np.argmax(np.random.multinomial(1, probas_pitch)) + min_pitches[voice_index]
+                    pitch = np.argmax(np.random.multinomial(1, probas_pitch))
 
                     seq[time_indexes[voice_index][batch_index], voice_index] = pitch
 
@@ -805,7 +774,7 @@ def parallelGibbs(models=None, melody=None, fermatas_melody=None, sequence_lengt
                     probas_pitch = np.exp(probas_pitch) / np.sum(np.exp(probas_pitch)) - 1e-7
 
                     # pitch can include slur_symbol
-                    pitch = np.argmax(np.random.multinomial(1, probas_pitch)) + min_pitches[voice_index]
+                    pitch = np.argmax(np.random.multinomial(1, probas_pitch))
 
                     seq[time_indexes[voice_index][batch_index], voice_index] = pitch
 
@@ -1012,8 +981,8 @@ def export_reharmo_turing_test(model_base_name, models, min_pitches, max_pitches
             seqs.append(as_ps_to_as_pas(np.transpose(seq[timesteps:-timesteps, :], axes=(1, 0)),
                                         min_pitches, max_pitches))
 
-        score = seq_to_stream_slur(np.transpose(seq[timesteps:-timesteps, :], axes=(1, 0)),
-                                   min_pitches, max_pitches)
+        score = indexed_chorale_to_score(np.transpose(seq[timesteps:-timesteps, :], axes=(1, 0)),
+                                         min_pitches, max_pitches)
 
         mf = midi.translate.music21ObjectToMidiFile(score)
         # versioning
@@ -1161,6 +1130,7 @@ if __name__ == '__main__':
     # load dataset
     X, num_voices, index2notes, note2indexes = pickle.load(open(pickled_dataset,
                                                                 'rb'))
+    num_pitches = list(map(len, index2notes))
 
     timesteps = args.timesteps
     batch_size = args.batch_size_train
@@ -1188,15 +1158,9 @@ if __name__ == '__main__':
     # when reharmonization
     if args.midi_file:
         melody = converter.parse(args.midi_file)
-        melody = part_to_list(melody.parts[0])
+        melody = part_to_inputs(melody.parts[0], note2indexes[0])
         num_voices = 3
-        # add fermatas for god save the queen
-        if args.midi_file == 'datasets/god_save_the_queen.mid':
-            fermatas_melody = np.concatenate((np.zeros(15 * 4),
-                                              np.ones(3 * 4),
-                                              np.zeros(21 * 4),
-                                              np.ones(3 * 4))
-                                             )
+
     elif args.reharmonization:
         # melody = as_pas_to_as_ps(X[args.reharmonization][0:1, :, :F_INDEX],
         #                          min_pitches=min_pitches,
@@ -1240,8 +1204,7 @@ if __name__ == '__main__':
     timesteps = int(models[0].input[0]._keras_shape[1])
 
     seq = generation(model_base_name=model_name, models=models,
-                     min_pitches=min_pitches,
-                     max_pitches=max_pitches,
+                     num_pitches=num_pitches,
                      timesteps=timesteps,
                      melody=melody, initial_seq=None, temperature=temperature,
                      fermatas_melody=fermatas_melody, parallel=parallel, batch_size_per_voice=batch_size_per_voice,
