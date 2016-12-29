@@ -1165,9 +1165,8 @@ if __name__ == '__main__':
         # melody = as_pas_to_as_ps(X[args.reharmonization][0:1, :, :F_INDEX],
         #                          min_pitches=min_pitches,
         #                          max_pitches=max_pitches)[0]
-        melody = X[args.reharmonization][0, :, :F_INDEX]
+        melody = X[args.reharmonization][0, : ]
         num_voices = 3
-        fermatas_melody = X[args.reharmonization][0, :, F_INDEX]
     else:
         num_voices = 4
         melody = None
