@@ -21,7 +21,8 @@ from data_utils import BEAT_SIZE, \
     seq_to_stream, BITS_FERMATA, \
     part_to_list, generator_from_raw_dataset, BACH_DATASET, all_features, \
     F_INDEX, to_fermata, indexed_chorale_to_score, fermata_melody_to_fermata, \
-    seqs_to_stream, as_ps_to_as_pas, initialization, as_pas_to_as_ps, START_SYMBOL, END_SYMBOL, part_to_inputs
+    seqs_to_stream, as_ps_to_as_pas, initialization, as_pas_to_as_ps, START_SYMBOL, END_SYMBOL, part_to_inputs, \
+    NUM_VOICES
 
 from fast_weights.fw.fast_weights_layer import FastWeights
 
@@ -813,7 +814,7 @@ def save_model(model, model_name, yaml=True, overwrite=False):
 
 
 def create_models(model_name=None, create_new=False, num_dense=200, num_units_lstm=[200, 200],
-                  pickled_dataset=BACH_DATASET):
+                  pickled_dataset=BACH_DATASET, num_voices=4):
     """
     Choose one model
     :param model_name:
@@ -822,7 +823,7 @@ def create_models(model_name=None, create_new=False, num_dense=200, num_units_ls
 
     _, _, index2notes, _ = pickle.load(open(pickled_dataset, 'rb'))
     num_pitches = list(map(len, index2notes))
-    for voice_index in range(4):
+    for voice_index in range(num_voices):
         # We only need one example for features dimensions
         gen = generator_from_raw_dataset(batch_size=batch_size, timesteps=timesteps,
                                          voice_index=voice_index, pickled_dataset=pickled_dataset)
@@ -870,15 +871,15 @@ def create_models(model_name=None, create_new=False, num_dense=200, num_units_ls
             save_model(model, model_name=model_path_name, overwrite=create_new)
 
 
-def load_models(model_base_name=None):
+def load_models(model_base_name=None, num_voices=4):
     """
     load 4 models whose base name is model_base_name
     models must exist
     :param model_base_name:
-    :return: list of 4 models
+    :return: list of num_voices models
     """
     models = []
-    for voice_index in range(4):
+    for voice_index in range(num_voices):
         model_path_name = 'models/' + model_base_name + '_' + str(voice_index)
         model = load_model(model_path_name)
         model.compile(optimizer='adam', loss={'pitch_prediction': 'categorical_crossentropy'
@@ -891,13 +892,13 @@ def load_models(model_base_name=None):
 def train_models(model_name,
                  samples_per_epoch,
                  num_epochs,
-                 nb_val_samples, timesteps, pickled_dataset=BACH_DATASET):
+                 nb_val_samples, timesteps, pickled_dataset=BACH_DATASET, num_voices=4):
     """
     Train models
 
     """
     models = []
-    for voice_index in range(4):
+    for voice_index in range(num_voices):
         # Load appropriate generators
 
         generator_train = (({'left_features': left_features,
@@ -1159,16 +1160,16 @@ if __name__ == '__main__':
     if args.midi_file:
         melody = converter.parse(args.midi_file)
         melody = part_to_inputs(melody.parts[0], note2indexes[0])
-        num_voices = 3
+        num_voices = NUM_VOICES - 1
 
     elif args.reharmonization:
         # melody = as_pas_to_as_ps(X[args.reharmonization][0:1, :, :F_INDEX],
         #                          min_pitches=min_pitches,
         #                          max_pitches=max_pitches)[0]
         melody = X[args.reharmonization][0, : ]
-        num_voices = 3
+        num_voices = NUM_VOICES - 1
     else:
-        num_voices = 4
+        num_voices = NUM_VOICES
         melody = None
 
     num_iterations = args.num_iterations // batch_size_per_voice // num_voices
@@ -1185,18 +1186,19 @@ if __name__ == '__main__':
     #                                   c[0, :, F_INDEX]))
     # melody = None
 
-    if not os.path.exists('models/' + model_name + '_3.yaml'):
+    if not os.path.exists('models/' + model_name + '_' + str(NUM_VOICES - 1) + '.yaml'):
         create_models(model_name, create_new=overwrite, num_units_lstm=num_units_lstm, num_dense=num_dense,
-                      pickled_dataset=pickled_dataset)
+                      pickled_dataset=pickled_dataset, num_voices=num_voices)
     if train:
         models = train_models(model_name=model_name,
                               samples_per_epoch=samples_per_epoch,
                               nb_val_samples=nb_val_samples,
                               num_epochs=num_epochs,
                               timesteps=timesteps,
-                              pickled_dataset=pickled_dataset)
+                              pickled_dataset=pickled_dataset,
+                              num_voices=num_voices)
     else:
-        models = load_models(model_name)
+        models = load_models(model_name, num_voices=num_voices)
 
     temperature = 1.
 

@@ -11,10 +11,10 @@ from tqdm import tqdm
 import numpy as np
 from music21 import corpus, converter, stream, note, duration
 
-NUM_VOICES = 4
+NUM_VOICES = 5
 
-SUBDIVISION = 2  # quarter note subdivision
-BEAT_SIZE = 2
+SUBDIVISION = 4  # quarter note subdivision
+BEAT_SIZE = 4
 
 BITS_FERMATA = 2  # number of bits needed to encode fermata
 RANGE_FERMATA = 3  # 3 beats before fermatas
@@ -59,8 +59,9 @@ def filter_file_list(file_list, num_voices=4):
     Only retain num_voices voices chorales
     """
     l = []
-    for file_name in file_list:
+    for k, file_name in enumerate(file_list):
         c = converter.parse(file_name)
+        # print(k, file_name)
         if len(c.parts) == num_voices:
             l.append(file_name)
     return l
@@ -538,11 +539,11 @@ def part_to_inputs(part, note2index):
 def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False):
     # todo transposition
     X = []
-    # todo folders
     index2notes, note2indexes = create_index_dicts(chorale_list, num_voices=num_voices)
     for chorale_file in tqdm(chorale_list):
         try:
             inputs = chorale_to_inputs(chorale_file, num_voices=num_voices, note2indexes=note2indexes)
+            print(chorale_file, inputs.shape)
             # todo add fermatas here
             X.append(inputs)
         except (AttributeError, IndexError):
@@ -929,9 +930,9 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
         start_symbols = np.array(list(map(lambda note2index: note2index[START_SYMBOL], note2indexes)))
         end_symbols = np.array(list(map(lambda note2index: note2index[END_SYMBOL], note2indexes)))
 
-        extended_chorale = np.concatenate((np.full(padding_dimensions, start_symbols[: None]),
+        extended_chorale = np.concatenate((np.full(padding_dimensions, start_symbols),
                                            extended_chorale,
-                                           np.full(padding_dimensions, end_symbols[: None])),
+                                           np.full(padding_dimensions, end_symbols)),
                                           axis=0)
         chorale_length = len(extended_chorale)
 
@@ -1330,7 +1331,7 @@ def initialization(dataset_path=None):
     from glob import glob
     print('Creating dataset')
     if dataset_path:
-        chorale_list = filter_file_list(glob(dataset_path + '/*.mid') + glob(dataset_path + '/*.xml'))
+        chorale_list = filter_file_list(glob(dataset_path + '/*.mid') + glob(dataset_path + '/*.xml'), num_voices=NUM_VOICES)
         pickled_dataset = 'datasets/custom_dataset/' + dataset_path.split('/')[-1] + '.pickle'
     else:
         chorale_list = filter_file_list(corpus.getBachChorales(fileExtensions='xml'))
