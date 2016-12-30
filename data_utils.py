@@ -41,6 +41,7 @@ class Metadata:
         raise NotImplementedError
 
     def get_index(self, value):
+        # trick with the 0 value
         raise NotImplementedError
 
     def evaluate(self, chorale):
@@ -50,13 +51,15 @@ class Metadata:
         raise NotImplementedError
 
 
+# todo BeatMetadata class
 # todo add strong/weak beat metadata
+
 class KeyMetadatas(Metadata):
     def __init__(self, windowSize=4):
         self.windowSize = windowSize
         self.is_global = False
         self.num_max_sharps = 7
-        self.num_values = 15
+        self.num_values = 16
 
     # todo check if this method is correct for windowSize > 1
     def evaluate(self, chorale):
@@ -75,7 +78,7 @@ class KeyMetadatas(Metadata):
             beat_index = time_index / SUBDIVISION
             if beat_index in measure_offset_map:
                 measure_index += 1
-            key_signatures[time_index] = res[measure_index].sharps + self.num_max_sharps
+            key_signatures[time_index] = res[measure_index].sharps + self.num_max_sharps + 1
         return np.array(key_signatures, dtype=np.int32)
 
 
@@ -418,20 +421,23 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, meta
                 min_transposition = max(min_midi_pitches - min_midi_pitches_current)
                 max_transposition = min(max_midi_pitches - max_midi_pitches_current)
                 for t in range(min_transposition, max_transposition + 1):
-                    chorale_tranposed = chorale.transpose(t)
-                    inputs = chorale_to_inputs(chorale_tranposed, num_voices=num_voices, index2notes=index2notes,
-                                               note2indexes=note2indexes
-                                               )
-                    md = []
-                    if metadatas:
-                        for metadata in metadatas:
-                            # todo add this
-                            if metadata.is_global:
-                                pass
-                            else:
-                                md.append(metadata.evaluate(chorale_tranposed))
-                    X.append(inputs)
-                    X_metadatas.append(md)
+                    try:
+                        chorale_tranposed = chorale.transpose(t)
+                        inputs = chorale_to_inputs(chorale_tranposed, num_voices=num_voices, index2notes=index2notes,
+                                                   note2indexes=note2indexes
+                                                   )
+                        md = []
+                        if metadatas:
+                            for metadata in metadatas:
+                                # todo add this
+                                if metadata.is_global:
+                                    pass
+                                else:
+                                    md.append(metadata.evaluate(chorale_tranposed))
+                        X.append(inputs)
+                        X_metadatas.append(md)
+                    except KeyError:
+                        pass
             else:
                 print("Warning: no transposition! shouldn't be used!")
                 inputs = chorale_to_inputs(chorale, num_voices=num_voices,
@@ -439,10 +445,10 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, meta
                                            note2indexes=note2indexes)
                 X.append(inputs)
 
-                # todo add fermatas here
         except (AttributeError, IndexError):
             pass
 
+    # todo save metadatas objects in pickle file
     dataset = (X, X_metadatas, num_voices, index2notes, note2indexes)
     pickle.dump(dataset, open(dataset_name, 'wb'), pickle.HIGHEST_PROTOCOL)
     print(str(len(X)) + ' files written in ' + dataset_name)
@@ -516,21 +522,40 @@ def all_features(chorale, voice_index, time_index, timesteps, num_pitches, num_v
             )
 
 
+def all_metadatas(chorale_metadatas, time_index=None, timesteps=None, metadatas=None):
+    left = []
+    right = []
+    center = []
+    for metadata_index, metadata in enumerate(metadatas):
+        left.append(list(map(lambda value: to_onehot(value, num_indexes=metadata.num_values),
+                             chorale_metadatas[metadata_index][time_index - timesteps:time_index])))
+        right.append(list(map(lambda value: to_onehot(value, num_indexes=metadata.num_values),
+                              chorale_metadatas[metadata_index][time_index + timesteps: time_index: -1])))
+        center.append(to_onehot(chorale_metadatas[metadata_index][time_index],
+                                num_indexes=metadata.num_values))
+    left = np.concatenate(left, axis=1)
+    right = np.concatenate(right, axis=1)
+    center = np.concatenate(center)
+    return left, center, right
+
+
 def generator_from_raw_dataset(batch_size, timesteps, voice_index,
-                               phase='train', percentage_train=0.8, pickled_dataset=BACH_DATASET, transpose=True):
+                               phase='train', percentage_train=0.8, pickled_dataset=BACH_DATASET,
+                               transpose=True, metadatas=None):
     """
      Returns a generator of
             (left_features,
             central_features,
             right_features,
             beats,
+            metas,
             labels,
             fermatas) tuples
 
             where fermatas = (fermatas_left, central_fermatas, fermatas_right)
     """
 
-    X, num_voices, index2notes, note2indexes = pickle.load(open(pickled_dataset, 'rb'))
+    X, X_metadatas, num_voices, index2notes, note2indexes = pickle.load(open(pickled_dataset, 'rb'))
     num_pitches = list(map(lambda x: len(x), index2notes))
 
     # Set chorale_indices
@@ -545,12 +570,17 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
     beats = []
     beats_right = []
     beats_left = []
+    left_metas = []
+    right_metas = []
+    metas = []
+
     labels = []
     batch = 0
 
     while True:
         chorale_index = np.random.choice(chorale_indices)
         extended_chorale = np.transpose(X[chorale_index])
+        chorale_metas = X_metadatas[chorale_index]
         padding_dimensions = (timesteps,) + extended_chorale.shape[1:]
 
         start_symbols = np.array(list(map(lambda note2index: note2index[START_SYMBOL], note2indexes)))
@@ -560,6 +590,11 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
                                            extended_chorale,
                                            np.full(padding_dimensions, end_symbols)),
                                           axis=0)
+        extended_chorale_metas = [np.concatenate((np.zeros((timesteps,)),
+                                                  chorale_meta,
+                                                  np.zeros((timesteps,))),
+                                                 axis=0)
+                                  for chorale_meta in chorale_metas]
         chorale_length = len(extended_chorale)
 
         time_index = np.random.randint(timesteps, chorale_length - timesteps)
@@ -567,6 +602,8 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
         features = all_features(chorale=extended_chorale, voice_index=voice_index, time_index=time_index,
                                 timesteps=timesteps, num_pitches=num_pitches,
                                 num_voices=num_voices)
+        left_meta, meta, right_meta = all_metadatas(chorale_metadatas=extended_chorale_metas, metadatas=metadatas,
+                                                    time_index=time_index, timesteps=timesteps)
 
         (left_feature, central_feature, right_feature,
          (beat_left, beat, beat_right),
@@ -576,10 +613,16 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
         left_features.append(left_feature)
         right_features.append(right_feature)
         central_features.append(central_feature)
+
         beats.append(beat)
         beats_right.append(beat_right)
         beats_left.append(beat_left)
+
+        left_metas.append(left_meta)
+        right_metas.append(right_meta)
+        metas.append(meta)
         labels.append(label)
+
         batch += 1
 
         # if there is a full batch
@@ -590,6 +633,10 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
                             (np.array(beats_left, dtype=np.float32),
                              np.array(beats, dtype=np.float32),
                              np.array(beats_right, dtype=np.float32)
+                             ),
+                            (np.array(left_metas, dtype=np.float32),
+                             np.array(metas, dtype=np.float32),
+                             np.array(right_metas, dtype=np.float32)
                              ),
                             np.array(labels, dtype=np.float32))
 
@@ -603,6 +650,9 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
             beats = []
             beats_left = []
             beats_right = []
+            left_metas = []
+            right_metas = []
+            metas = []
             labels = []
 
 
@@ -675,7 +725,7 @@ def seqs_to_stream(seqs):
 
 
 def indexed_chorale_to_score(seq, pickled_dataset):
-    _, _, index2notes, note2indexes = pickle.load(open(pickled_dataset, 'rb'))
+    _, _, _, index2notes, note2indexes = pickle.load(open(pickled_dataset, 'rb'))
     num_pitches = list(map(len, index2notes))
     slur_indexes = list(map(lambda d: d[SLUR_SYMBOL], note2indexes))
 
@@ -742,7 +792,7 @@ def create_index_dicts(chorale_list, num_voices=4):
     return index2notes, note2indexes
 
 
-def initialization(dataset_path=None):
+def initialization(dataset_path=None, metadatas=None):
     from glob import glob
     print('Creating dataset')
     if dataset_path:
@@ -750,7 +800,7 @@ def initialization(dataset_path=None):
                                         num_voices=NUM_VOICES)
         pickled_dataset = 'datasets/custom_dataset/' + dataset_path.split('/')[-1] + '.pickle'
     else:
-        chorale_list = filter_file_list(corpus.getBachChorales(fileExtensions='xml')[:10])
+        chorale_list = filter_file_list(corpus.getBachChorales(fileExtensions='xml'))
         pickled_dataset = BACH_DATASET
 
     min_pitches, max_pitches = compute_min_max_pitches(chorale_list, voices=voice_ids)
@@ -758,8 +808,7 @@ def initialization(dataset_path=None):
     make_dataset(chorale_list, pickled_dataset,
                  num_voices=len(voice_ids),
                  transpose=True,
-                 metadatas=[FermataMetadatas(),
-                            KeyMetadatas(windowSize=1)])
+                 metadatas=metadatas)
 
 
 if __name__ == '__main__':

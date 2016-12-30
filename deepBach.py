@@ -22,7 +22,7 @@ from data_utils import BEAT_SIZE, \
     generator_from_raw_dataset, BACH_DATASET, all_features, \
     F_INDEX, to_fermata, indexed_chorale_to_score, fermata_melody_to_fermata, \
     seqs_to_stream, initialization, START_SYMBOL, END_SYMBOL, part_to_inputs, \
-    NUM_VOICES
+    NUM_VOICES, FermataMetadatas, KeyMetadatas, all_metadatas
 
 from fast_weights.fw.fast_weights_layer import FastWeights
 
@@ -321,7 +321,7 @@ def deepBach(num_features_lr, num_features_c, num_pitches, num_units_lstm=[200],
     return model
 
 
-def skip(num_features_lr, num_features_c, num_pitches, num_units_lstm=[200],
+def skip(num_features_lr, num_features_c, num_features_meta, num_pitches, num_units_lstm=[200],
          num_dense=200):
     """
 
@@ -338,27 +338,27 @@ def skip(num_features_lr, num_features_c, num_pitches, num_units_lstm=[200],
     beat = Input(shape=(BEAT_SIZE,), name='beat')
     beats_right = Input(shape=(timesteps, BEAT_SIZE), name='beats_right')
     beats_left = Input(shape=(timesteps, BEAT_SIZE), name='beats_left')
-    fermatas_left = Input(shape=(timesteps, BITS_FERMATA), name='fermatas_left')
-    fermatas_right = Input(shape=(timesteps, BITS_FERMATA), name='fermatas_right')
-    central_fermata = Input(shape=(BITS_FERMATA,), name='central_fermata')
+    left_metas = Input(shape=(timesteps, num_features_meta), name='left_metas')
+    right_metas = Input(shape=(timesteps, num_features_meta), name='right_metas')
+    central_metas = Input(shape=(num_features_meta,), name='central_metas')
 
     # embedding layer for left and right
-    embedding_left = Dense(input_dim=num_features_lr + BEAT_SIZE + BITS_FERMATA,
+    embedding_left = Dense(input_dim=num_features_lr + BEAT_SIZE + num_features_meta,
                            output_dim=num_dense, name='embedding_left')
-    embedding_right = Dense(input_dim=num_features_lr + BEAT_SIZE + BITS_FERMATA,
+    embedding_right = Dense(input_dim=num_features_lr + BEAT_SIZE + num_features_meta,
                             output_dim=num_dense, name='embedding_right')
 
     predictions_left = TimeDistributed(embedding_left)(merge((left_features,
                                                               beats_left,
-                                                              fermatas_left),
+                                                              left_metas),
                                                              mode='concat'))
     predictions_right = TimeDistributed(embedding_right)(merge((right_features,
                                                                 beats_right,
-                                                                fermatas_right),
+                                                                right_metas),
                                                                mode='concat'))
 
     predictions_center = merge((central_features, beat,
-                                central_fermata), mode='concat')
+                                central_metas), mode='concat')
 
     predictions_center = Dense(num_dense, activation='relu')(predictions_center)
     predictions_center = Dense(num_dense, activation='relu')(predictions_center)
@@ -415,7 +415,7 @@ def skip(num_features_lr, num_features_c, num_pitches, num_units_lstm=[200],
 
     model = Model(input=[left_features, central_features, right_features,
                          beat, beats_left, beats_right,
-                         fermatas_left, fermatas_right, central_fermata],
+                         left_metas, right_metas, central_metas],
                   output=pitch_prediction)
 
     model.compile(optimizer='adam',
@@ -558,7 +558,7 @@ def gibbs(models=None, melody=None, fermatas_melody=None, sequence_length=50, nu
     samples from models in model_base_name
 
     """
-    X, min_pitches, max_pitches, num_voices = pickle.load(open(pickled_dataset, 'rb'))
+    X, X_metadatas, min_pitches, max_pitches, num_voices = pickle.load(open(pickled_dataset, 'rb'))
 
     # load models if not
     if models is None:
@@ -663,7 +663,7 @@ def gibbs(models=None, melody=None, fermatas_melody=None, sequence_length=50, nu
     return seq[timesteps:-timesteps, :]
 
 
-def parallelGibbs(models=None, melody=None, sequence_length=50, num_iterations=1000,
+def parallelGibbs(models=None, melody=None, chorale_metas=None, sequence_length=50, num_iterations=1000,
                   timesteps=16,
                   model_base_name='models/raw_dataset/tmp/',
                   num_voices=4, temperature=1., initial_seq=None, batch_size_per_voice=16, parallel_updates=True,
@@ -672,7 +672,7 @@ def parallelGibbs(models=None, melody=None, sequence_length=50, num_iterations=1
     samples from models in model_base_name
     """
 
-    X, num_voices, index2notes, note2indexes = pickle.load(open(pickled_dataset, 'rb'))
+    X, X_metadatas, num_voices, index2notes, note2indexes = pickle.load(open(pickled_dataset, 'rb'))
     num_pitches = list(map(len, index2notes))
 
     # load models if not
@@ -707,6 +707,15 @@ def parallelGibbs(models=None, melody=None, sequence_length=50, num_iterations=1
     else:
         min_voice = 0
 
+    if chorale_metas is not None:
+        extended_chorale_metas = [np.concatenate((np.zeros((timesteps,)),
+                                                  chorale_meta,
+                                                  np.zeros((timesteps,))),
+                                                 axis=0)
+                                  for chorale_meta in chorale_metas]
+    else:
+        raise NotImplementedError
+
     min_temperature = temperature
     temperature = 1.5
 
@@ -724,7 +733,6 @@ def parallelGibbs(models=None, melody=None, sequence_length=50, num_iterations=1
             time_indexes[voice_index] = []
 
             for batch_index in range(batch_size_per_voice):
-
                 time_index = np.random.randint(timesteps, sequence_length + timesteps)
                 time_indexes[voice_index].append(time_index)
 
@@ -734,12 +742,19 @@ def parallelGibbs(models=None, melody=None, sequence_length=50, num_iterations=1
                  (beats_left, beat, beats_right),
                  label) = all_features(seq, voice_index, time_index, timesteps, num_pitches, num_voices)
 
+                left_metas, central_metas, right_metas = all_metadatas(chorale_metadatas=extended_chorale_metas,
+                                                                    metadatas=metadatas,
+                                                                    time_index=time_index, timesteps=timesteps)
+
                 input_features = {'left_features': left_feature[:, :],
                                   'central_features': central_feature[:],
                                   'right_features': right_feature[:, :],
                                   'beat': beat[:],
                                   'beats_left': beats_left[:, :],
-                                  'beats_right': beats_right[:, :]}
+                                  'beats_right': beats_right[:, :],
+                                  'left_metas': left_metas,
+                                  'central_metas': central_metas,
+                                  'right_metas': right_metas}
 
                 # list of dicts: predict need dict of numpy arrays
                 batch_input_features.append(input_features)
@@ -815,24 +830,25 @@ def save_model(model, model_name, yaml=True, overwrite=False):
 
 
 def create_models(model_name=None, create_new=False, num_dense=200, num_units_lstm=[200, 200],
-                  pickled_dataset=BACH_DATASET, num_voices=4):
+                  pickled_dataset=BACH_DATASET, num_voices=4, metadatas=None):
     """
     Choose one model
     :param model_name:
     :return:
     """
 
-    _, _, index2notes, _ = pickle.load(open(pickled_dataset, 'rb'))
+    _, _, _, index2notes, _ = pickle.load(open(pickled_dataset, 'rb'))
     num_pitches = list(map(len, index2notes))
     for voice_index in range(num_voices):
         # We only need one example for features dimensions
-        gen = generator_from_raw_dataset(batch_size=batch_size, timesteps=timesteps,
+        gen = generator_from_raw_dataset(batch_size=batch_size, timesteps=timesteps, metadatas=metadatas,
                                          voice_index=voice_index, pickled_dataset=pickled_dataset)
 
         (left_features,
          central_features,
          right_features,
          beats,
+         metas,
          labels) = next(gen)
 
         if 'deepbach' in model_name:
@@ -862,6 +878,7 @@ def create_models(model_name=None, create_new=False, num_dense=200, num_units_ls
         elif 'skip' in model_name:
             model = skip(num_features_lr=left_features.shape[-1],
                          num_features_c=central_features.shape[-1],
+                         num_features_meta=metas[0].shape[-1],
                          num_pitches=num_pitches[voice_index],
                          num_dense=num_dense, num_units_lstm=num_units_lstm)
         else:
@@ -908,15 +925,19 @@ def train_models(model_name,
                              'beat': beat,
                              'beats_left': beats_left,
                              'beats_right': beats_right,
+                             'left_metas': left_metas,
+                             'right_metas': right_metas,
+                             'central_metas': central_metas,
                              },
                             {'pitch_prediction': labels})
                            for (left_features,
                                 central_features,
                                 right_features,
                                 (beats_left, beat, beats_right),
+                                (left_metas, central_metas, right_metas),
                                 labels)
 
-                           in generator_from_raw_dataset(batch_size=batch_size,
+                           in generator_from_raw_dataset(batch_size=batch_size, metadatas=metadatas,
                                                          timesteps=timesteps,
                                                          voice_index=voice_index,
                                                          phase='train',
@@ -928,17 +949,20 @@ def train_models(model_name,
                            'right_features': right_features,
                            'beat': beat,
                            'beats_left': beats_left,
-                           'beats_right': beats_right
-
+                           'beats_right': beats_right,
+                           'left_metas': left_metas,
+                           'right_metas': right_metas,
+                           'central_metas': central_metas
                            },
                           {'pitch_prediction': labels})
                          for (left_features,
                               central_features,
                               right_features,
                               (beats_left, beat, beats_right),
+                              (left_metas, central_metas, right_metas),
                               labels)
 
-                         in generator_from_raw_dataset(batch_size=batch_size,
+                         in generator_from_raw_dataset(batch_size=batch_size, metadatas=metadatas,
                                                        timesteps=timesteps,
                                                        voice_index=voice_index,
                                                        phase='train',
@@ -1116,6 +1140,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
     print(args)
 
+    # fixed set of metadatas to use
+    metadatas = [FermataMetadatas(), KeyMetadatas(windowSize=1)]
+
     # datasets
     # change BACH_DATASET constant i argument is present
     if args.dataset:
@@ -1127,11 +1154,12 @@ if __name__ == '__main__':
         pickled_dataset = BACH_DATASET
 
     if not os.path.exists(pickled_dataset):
-        initialization(dataset_path)
+        initialization(dataset_path,
+                       metadatas=metadatas)
 
     # load dataset
-    X, num_voices, index2notes, note2indexes = pickle.load(open(pickled_dataset,
-                                                                'rb'))
+    X, X_metadatas, num_voices, index2notes, note2indexes = pickle.load(open(pickled_dataset,
+                                                                             'rb'))
     num_pitches = list(map(len, index2notes))
 
     timesteps = args.timesteps
@@ -1167,7 +1195,7 @@ if __name__ == '__main__':
         # melody = as_pas_to_as_ps(X[args.reharmonization][0:1, :, :F_INDEX],
         #                          min_pitches=min_pitches,
         #                          max_pitches=max_pitches)[0]
-        melody = X[args.reharmonization][0, : ]
+        melody = X[args.reharmonization][0, :]
         num_voices = NUM_VOICES - 1
     else:
         num_voices = NUM_VOICES
@@ -1189,7 +1217,7 @@ if __name__ == '__main__':
 
     if not os.path.exists('models/' + model_name + '_' + str(NUM_VOICES - 1) + '.yaml'):
         create_models(model_name, create_new=overwrite, num_units_lstm=num_units_lstm, num_dense=num_dense,
-                      pickled_dataset=pickled_dataset, num_voices=num_voices)
+                      pickled_dataset=pickled_dataset, num_voices=num_voices, metadatas=metadatas)
     if train:
         models = train_models(model_name=model_name,
                               samples_per_epoch=samples_per_epoch,
