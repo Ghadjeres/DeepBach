@@ -408,7 +408,6 @@ def all_features(chorale, voice_index, time_index, timesteps, num_pitches, num_v
 
     # put timesteps=None to only have the current beat
     beat = to_beat(time_index, timesteps=timesteps)
-
     label = to_onehot(chorale[time_index, voice_index], num_indexes=num_pitches[voice_index])
 
     return (np.array(left_feature),

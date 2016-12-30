@@ -43,6 +43,7 @@ def generation(model_base_name, models, num_pitches, timesteps, melody=None,
 
     else:
         # todo refactor
+        print('gibbs function must be refactored!')
         seq = gibbs(models=models, model_base_name=model_base_name,
                     timesteps=timesteps,
                     melody=melody, fermatas_melody=fermatas_melody,
@@ -712,7 +713,7 @@ def parallelGibbs(models=None, melody=None, sequence_length=50, num_iterations=1
     # Main loop
     for iteration in tqdm(range(num_iterations)):
 
-        temperature = max(min_temperature, temperature * 0.9999)  # Recuit
+        temperature = max(min_temperature, temperature * 0.999)  # Recuit
         print(temperature)
 
         time_indexes = {}
@@ -1196,9 +1197,9 @@ if __name__ == '__main__':
                               num_epochs=num_epochs,
                               timesteps=timesteps,
                               pickled_dataset=pickled_dataset,
-                              num_voices=num_voices)
+                              num_voices=NUM_VOICES)
     else:
-        models = load_models(model_name, num_voices=num_voices)
+        models = load_models(model_name, num_voices=NUM_VOICES)
 
     temperature = 1.
 

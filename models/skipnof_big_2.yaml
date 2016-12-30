@@ -1,0 +1,498 @@
+class_name: Model
+config:
+  input_layers:
+  - [left_features, 0, 0]
+  - [central_features, 0, 0]
+  - [right_features, 0, 0]
+  - [beat, 0, 0]
+  - [beats_left, 0, 0]
+  - [beats_right, 0, 0]
+  layers:
+  - class_name: InputLayer
+    config:
+      batch_input_shape: !!python/tuple [null, 16, 165]
+      input_dtype: float32
+      name: left_features
+      sparse: false
+    inbound_nodes: []
+    name: left_features
+  - class_name: InputLayer
+    config:
+      batch_input_shape: !!python/tuple [null, 16, 4]
+      input_dtype: float32
+      name: beats_left
+      sparse: false
+    inbound_nodes: []
+    name: beats_left
+  - class_name: InputLayer
+    config:
+      batch_input_shape: !!python/tuple [null, 16, 165]
+      input_dtype: float32
+      name: right_features
+      sparse: false
+    inbound_nodes: []
+    name: right_features
+  - class_name: InputLayer
+    config:
+      batch_input_shape: !!python/tuple [null, 16, 4]
+      input_dtype: float32
+      name: beats_right
+      sparse: false
+    inbound_nodes: []
+    name: beats_right
+  - class_name: Merge
+    config:
+      arguments: &id001 {}
+      concat_axis: -1
+      dot_axes: -1
+      mode: concat
+      mode_type: raw
+      name: merge_17
+      output_mask: null
+      output_mask_type: raw
+      output_shape: null
+      output_shape_type: raw
+    inbound_nodes:
+    - - [left_features, 0, 0]
+      - [beats_left, 0, 0]
+    name: merge_17
+  - class_name: Merge
+    config:
+      arguments: *id001
+      concat_axis: -1
+      dot_axes: -1
+      mode: concat
+      mode_type: raw
+      name: merge_18
+      output_mask: null
+      output_mask_type: raw
+      output_shape: null
+      output_shape_type: raw
+    inbound_nodes:
+    - - [right_features, 0, 0]
+      - [beats_right, 0, 0]
+    name: merge_18
+  - class_name: TimeDistributed
+    config:
+      layer:
+        class_name: Dense
+        config:
+          W_constraint: null
+          W_regularizer: null
+          activation: linear
+          activity_regularizer: null
+          b_constraint: null
+          b_regularizer: null
+          batch_input_shape: !!python/tuple [null, 169]
+          bias: true
+          init: glorot_uniform
+          input_dim: 169
+          input_dtype: float32
+          name: embedding_left
+          output_dim: 256
+          trainable: true
+      name: timedistributed_5
+      trainable: true
+    inbound_nodes:
+    - - [merge_17, 0, 0]
+    name: timedistributed_5
+  - class_name: TimeDistributed
+    config:
+      layer:
+        class_name: Dense
+        config:
+          W_constraint: null
+          W_regularizer: null
+          activation: linear
+          activity_regularizer: null
+          b_constraint: null
+          b_regularizer: null
+          batch_input_shape: !!python/tuple [null, 169]
+          bias: true
+          init: glorot_uniform
+          input_dim: 169
+          input_dtype: float32
+          name: embedding_right
+          output_dim: 256
+          trainable: true
+      name: timedistributed_6
+      trainable: true
+    inbound_nodes:
+    - - [merge_18, 0, 0]
+    name: timedistributed_6
+  - class_name: Dropout
+    config: {name: dropout_7, p: 0.2, trainable: true}
+    inbound_nodes:
+    - - [timedistributed_5, 0, 0]
+    name: dropout_7
+  - class_name: Dropout
+    config: {name: dropout_8, p: 0.2, trainable: true}
+    inbound_nodes:
+    - - [timedistributed_6, 0, 0]
+    name: dropout_8
+  - class_name: LSTM
+    config:
+      U_regularizer: null
+      W_regularizer: null
+      activation: tanh
+      b_regularizer: null
+      batch_input_shape: !!python/tuple [null, null, 256]
+      consume_less: cpu
+      dropout_U: 0.0
+      dropout_W: 0.0
+      forget_bias_init: one
+      go_backwards: false
+      init: glorot_uniform
+      inner_activation: hard_sigmoid
+      inner_init: orthogonal
+      input_dim: 256
+      input_dtype: float32
+      input_length: null
+      name: lstm_left_0
+      output_dim: 512
+      return_sequences: true
+      stateful: false
+      trainable: true
+      unroll: false
+    inbound_nodes:
+    - - [dropout_7, 0, 0]
+    name: lstm_left_0
+  - class_name: LSTM
+    config:
+      U_regularizer: null
+      W_regularizer: null
+      activation: tanh
+      b_regularizer: null
+      batch_input_shape: !!python/tuple [null, null, 256]
+      consume_less: cpu
+      dropout_U: 0.0
+      dropout_W: 0.0
+      forget_bias_init: one
+      go_backwards: false
+      init: glorot_uniform
+      inner_activation: hard_sigmoid
+      inner_init: orthogonal
+      input_dim: 256
+      input_dtype: float32
+      input_length: null
+      name: lstm_right_0
+      output_dim: 512
+      return_sequences: true
+      stateful: false
+      trainable: true
+      unroll: false
+    inbound_nodes:
+    - - [dropout_8, 0, 0]
+    name: lstm_right_0
+  - class_name: Activation
+    config: {activation: relu, name: activation_9, trainable: true}
+    inbound_nodes:
+    - - [lstm_left_0, 0, 0]
+    name: activation_9
+  - class_name: InputLayer
+    config:
+      batch_input_shape: !!python/tuple [null, 126]
+      input_dtype: float32
+      name: central_features
+      sparse: false
+    inbound_nodes: []
+    name: central_features
+  - class_name: InputLayer
+    config:
+      batch_input_shape: !!python/tuple [null, 4]
+      input_dtype: float32
+      name: beat
+      sparse: false
+    inbound_nodes: []
+    name: beat
+  - class_name: Activation
+    config: {activation: relu, name: activation_10, trainable: true}
+    inbound_nodes:
+    - - [lstm_right_0, 0, 0]
+    name: activation_10
+  - class_name: Merge
+    config:
+      arguments: *id001
+      concat_axis: -1
+      dot_axes: -1
+      mode: concat
+      mode_type: raw
+      name: merge_20
+      output_mask: null
+      output_mask_type: raw
+      output_shape: null
+      output_shape_type: raw
+    inbound_nodes:
+    - - [activation_9, 0, 0]
+      - [dropout_7, 0, 0]
+    name: merge_20
+  - class_name: Merge
+    config:
+      arguments: *id001
+      concat_axis: -1
+      dot_axes: -1
+      mode: concat
+      mode_type: raw
+      name: merge_19
+      output_mask: null
+      output_mask_type: raw
+      output_shape: null
+      output_shape_type: raw
+    inbound_nodes:
+    - - [central_features, 0, 0]
+      - [beat, 0, 0]
+    name: merge_19
+  - class_name: Merge
+    config:
+      arguments: *id001
+      concat_axis: -1
+      dot_axes: -1
+      mode: concat
+      mode_type: raw
+      name: merge_21
+      output_mask: null
+      output_mask_type: raw
+      output_shape: null
+      output_shape_type: raw
+    inbound_nodes:
+    - - [activation_10, 0, 0]
+      - [dropout_8, 0, 0]
+    name: merge_21
+  - class_name: LSTM
+    config:
+      U_regularizer: null
+      W_regularizer: null
+      activation: tanh
+      b_regularizer: null
+      batch_input_shape: !!python/tuple [null, null, 768]
+      consume_less: cpu
+      dropout_U: 0.0
+      dropout_W: 0.0
+      forget_bias_init: one
+      go_backwards: false
+      init: glorot_uniform
+      inner_activation: hard_sigmoid
+      inner_init: orthogonal
+      input_dim: 768
+      input_dtype: float32
+      input_length: null
+      name: lstm_left_1
+      output_dim: 512
+      return_sequences: false
+      stateful: false
+      trainable: true
+      unroll: false
+    inbound_nodes:
+    - - [merge_20, 0, 0]
+    name: lstm_left_1
+  - class_name: Dense
+    config:
+      W_constraint: null
+      W_regularizer: null
+      activation: relu
+      activity_regularizer: null
+      b_constraint: null
+      b_regularizer: null
+      batch_input_shape: !!python/tuple [null, 130]
+      bias: true
+      init: glorot_uniform
+      input_dim: 130
+      input_dtype: float32
+      name: dense_7
+      output_dim: 256
+      trainable: true
+    inbound_nodes:
+    - - [merge_19, 0, 0]
+    name: dense_7
+  - class_name: LSTM
+    config:
+      U_regularizer: null
+      W_regularizer: null
+      activation: tanh
+      b_regularizer: null
+      batch_input_shape: !!python/tuple [null, null, 768]
+      consume_less: cpu
+      dropout_U: 0.0
+      dropout_W: 0.0
+      forget_bias_init: one
+      go_backwards: false
+      init: glorot_uniform
+      inner_activation: hard_sigmoid
+      inner_init: orthogonal
+      input_dim: 768
+      input_dtype: float32
+      input_length: null
+      name: lstm_right_1
+      output_dim: 512
+      return_sequences: false
+      stateful: false
+      trainable: true
+      unroll: false
+    inbound_nodes:
+    - - [merge_21, 0, 0]
+    name: lstm_right_1
+  - class_name: Activation
+    config: {activation: relu, name: activation_11, trainable: true}
+    inbound_nodes:
+    - - [lstm_left_1, 0, 0]
+    name: activation_11
+  - class_name: Lambda
+    config:
+      arguments: &id002 {}
+      function: !!python/tuple ["\xE3\x01\0\0\0\0\0\0\0\x01\0\0\0\x05\0\0\0S\0\0\0\
+          s\x1D\0\0\0|\0\0d\0\0d\0\0\N\x02\0d\x02\0d\0\0d\0\0\N\x02\0f\x03\0\x19S)\x03\
+          N\xE9\x01\0\0\0\xE9\xFF\xFF\xFF\xFF\xA9\0)\x01\xDA\x01tr\x03\0\0\0r\x03\0\
+          \0\0\xFA:/home/gaetan/Projets/Python/workspace/DeepBach/deepBach.py\xDA\b\
+          <lambda>\xF2\x01\0\0\xF3\0\0\0\0", null, null]
+      function_type: lambda
+      name: lambda_5
+      output_shape: !!python/tuple ["\xE3\x01\0\0\0\0\0\0\0\x01\0\0\0\x03\0\0\0S\0\
+          \0\0s\x12\0\0\0|\0\0d\x01\0\x19|\0\0d\x03\0\x19f\x02\0S)\x04N\xE9\0\0\0\0\
+          \xE9\x01\0\0\0\xE9\xFF\xFF\xFF\xFF\xA9\0)\x01\xDA\vinput_shaper\x04\0\0\0\
+          r\x04\0\0\0z:/home/gaetan/Projets/Python/workspace/DeepBach/deepBach.py\xDA\
+          \b<lambda>\xF3\x01\0\0\xF3\0\0\0\0", null, null]
+      output_shape_type: lambda
+      trainable: true
+    inbound_nodes:
+    - - [lstm_left_0, 0, 0]
+    name: lambda_5
+  - class_name: Dense
+    config:
+      W_constraint: null
+      W_regularizer: null
+      activation: relu
+      activity_regularizer: null
+      b_constraint: null
+      b_regularizer: null
+      batch_input_shape: !!python/tuple [null, 256]
+      bias: true
+      init: glorot_uniform
+      input_dim: 256
+      input_dtype: float32
+      name: dense_8
+      output_dim: 256
+      trainable: true
+    inbound_nodes:
+    - - [dense_7, 0, 0]
+    name: dense_8
+  - class_name: Activation
+    config: {activation: relu, name: activation_12, trainable: true}
+    inbound_nodes:
+    - - [lstm_right_1, 0, 0]
+    name: activation_12
+  - class_name: Lambda
+    config:
+      arguments: *id002
+      function: !!python/tuple ["\xE3\x01\0\0\0\0\0\0\0\x01\0\0\0\x05\0\0\0S\0\0\0\
+          s\x1D\0\0\0|\0\0d\0\0d\0\0\N\x02\0d\x02\0d\0\0d\0\0\N\x02\0f\x03\0\x19S)\x03\
+          N\xE9\x01\0\0\0\xE9\xFF\xFF\xFF\xFF\xA9\0)\x01\xDA\x01tr\x03\0\0\0r\x03\0\
+          \0\0\xFA:/home/gaetan/Projets/Python/workspace/DeepBach/deepBach.py\xDA\b\
+          <lambda>\xF5\x01\0\0\xF3\0\0\0\0", null, null]
+      function_type: lambda
+      name: lambda_6
+      output_shape: !!python/tuple ["\xE3\x01\0\0\0\0\0\0\0\x01\0\0\0\x03\0\0\0S\0\
+          \0\0s\x12\0\0\0|\0\0d\x01\0\x19|\0\0d\x03\0\x19f\x02\0S)\x04N\xE9\0\0\0\0\
+          \xE9\x01\0\0\0\xE9\xFF\xFF\xFF\xFF\xA9\0)\x01\xDA\vinput_shaper\x04\0\0\0\
+          r\x04\0\0\0z:/home/gaetan/Projets/Python/workspace/DeepBach/deepBach.py\xDA\
+          \b<lambda>\xF6\x01\0\0\xF3\0\0\0\0", null, null]
+      output_shape_type: lambda
+      trainable: true
+    inbound_nodes:
+    - - [lstm_right_0, 0, 0]
+    name: lambda_6
+  - class_name: Merge
+    config:
+      arguments: *id001
+      concat_axis: -1
+      dot_axes: -1
+      mode: concat
+      mode_type: raw
+      name: merge_22
+      output_mask: null
+      output_mask_type: raw
+      output_shape: null
+      output_shape_type: raw
+    inbound_nodes:
+    - - [activation_11, 0, 0]
+      - [lambda_5, 0, 0]
+    name: merge_22
+  - class_name: Dropout
+    config: {name: dropout_9, p: 0.2, trainable: true}
+    inbound_nodes:
+    - - [dense_8, 0, 0]
+    name: dropout_9
+  - class_name: Merge
+    config:
+      arguments: *id001
+      concat_axis: -1
+      dot_axes: -1
+      mode: concat
+      mode_type: raw
+      name: merge_23
+      output_mask: null
+      output_mask_type: raw
+      output_shape: null
+      output_shape_type: raw
+    inbound_nodes:
+    - - [activation_12, 0, 0]
+      - [lambda_6, 0, 0]
+    name: merge_23
+  - class_name: Merge
+    config:
+      arguments: *id001
+      concat_axis: -1
+      dot_axes: -1
+      mode: concat
+      mode_type: raw
+      name: merge_24
+      output_mask: null
+      output_mask_type: raw
+      output_shape: null
+      output_shape_type: raw
+    inbound_nodes:
+    - - [merge_22, 0, 0]
+      - [dropout_9, 0, 0]
+      - [merge_23, 0, 0]
+    name: merge_24
+  - class_name: Dense
+    config:
+      W_constraint: null
+      W_regularizer: null
+      activation: relu
+      activity_regularizer: null
+      b_constraint: null
+      b_regularizer: null
+      batch_input_shape: !!python/tuple [null, 2304]
+      bias: true
+      init: glorot_uniform
+      input_dim: 2304
+      input_dtype: float32
+      name: dense_9
+      output_dim: 256
+      trainable: true
+    inbound_nodes:
+    - - [merge_24, 0, 0]
+    name: dense_9
+  - class_name: Dense
+    config:
+      W_constraint: null
+      W_regularizer: null
+      activation: softmax
+      activity_regularizer: null
+      b_constraint: null
+      b_regularizer: null
+      batch_input_shape: !!python/tuple [null, 256]
+      bias: true
+      init: glorot_uniform
+      input_dim: 256
+      input_dtype: float32
+      name: pitch_prediction
+      output_dim: 39
+      trainable: true
+    inbound_nodes:
+    - - [dense_9, 0, 0]
+    name: pitch_prediction
+  name: model_3
+  output_layers:
+  - [pitch_prediction, 0, 0]
+keras_version: 1.2.0
