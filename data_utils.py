@@ -9,7 +9,7 @@ import pickle
 from tqdm import tqdm
 
 import numpy as np
-from music21 import corpus, converter, stream, note, duration
+from music21 import corpus, converter, stream, note, duration, analysis
 
 NUM_VOICES = 4
 
@@ -34,6 +34,91 @@ voice_ids = list(range(NUM_VOICES))  # soprano, alto, tenor, bass
 SLUR_SYMBOL = '__'
 START_SYMBOL = 'START'
 END_SYMBOL = 'END'
+
+
+class Metadata:
+    def __init__(self):
+        raise NotImplementedError
+
+    def get_index(self, value):
+        raise NotImplementedError
+
+    def evaluate(self, chorale):
+        """
+        takes a music21 chorale as input
+        """
+        raise NotImplementedError
+
+
+# todo add strong/weak beat metadata
+class KeyMetadatas(Metadata):
+    def __init__(self, windowSize=4):
+        self.windowSize = windowSize
+        self.is_global = False
+        self.num_max_sharps = 7
+        self.num_values = 15
+
+    # todo check if this method is correct for windowSize > 1
+    def evaluate(self, chorale):
+        # init key analyzer
+        ka = analysis.floatingKey.KeyAnalyzer(chorale)
+        ka.windowSize = self.windowSize
+        res = ka.run()
+
+        measure_offset_map = chorale.parts[0].measureOffsetMap()
+        length = int(chorale.duration.quarterLength * SUBDIVISION)  # in 16th notes
+
+        key_signatures = np.zeros((length,))
+
+        measure_index = -1
+        for time_index in range(length):
+            beat_index = time_index / SUBDIVISION
+            if beat_index in measure_offset_map:
+                measure_index += 1
+            key_signatures[time_index] = res[measure_index].sharps + self.num_max_sharps
+        return np.array(key_signatures, dtype=np.int32)
+
+
+class FermataMetadatas(Metadata):
+    def __init__(self, ):
+        self.is_global = False
+        self.num_values = 2
+
+    def get_index(self, value):
+        # values are 1 and 0
+        return value
+
+    def evaluate(self, chorale):
+        part = chorale.parts[0]
+        length = int(part.duration.quarterLength * SUBDIVISION)  # in 16th notes
+        list_notes = part.flat.notes
+        num_notes = len(list_notes)
+        j = 0
+        i = 0
+        fermatas = np.zeros((length,))
+        is_articulated = True
+        fermata = False
+        while i < length:
+            if j < num_notes - 1:
+                if list_notes[j + 1].offset > i / SUBDIVISION:
+
+                    if len(list_notes[j].expressions) == 1:
+                        fermata = True
+                    else:
+                        fermata = False
+                    fermatas[i] = fermata
+                    i += 1
+                else:
+                    j += 1
+            else:
+                if len(list_notes[j].expressions) == 1:
+                    fermata = True
+                else:
+                    fermata = False
+
+                fermatas[i] = fermata
+                i += 1
+        return np.array(fermatas, dtype=np.int32)
 
 
 def standard_name(note_or_rest):
@@ -313,10 +398,12 @@ def _min_max_midi_pitch(note_strings):
     return min_pitch, max_pitch
 
 
-def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False):
+def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, metadatas=None):
     # todo transposition
     X = []
+    X_metadatas = []
     index2notes, note2indexes = create_index_dicts(chorale_list, num_voices=num_voices)
+
     # todo clean this part
     min_max_midi_pitches = np.array(list(map(lambda d: _min_max_midi_pitch(d.values()), index2notes)))
     min_midi_pitches = min_max_midi_pitches[:, 0]
@@ -335,8 +422,18 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False):
                     inputs = chorale_to_inputs(chorale_tranposed, num_voices=num_voices, index2notes=index2notes,
                                                note2indexes=note2indexes
                                                )
+                    md = []
+                    if metadatas:
+                        for metadata in metadatas:
+                            # todo add this
+                            if metadata.is_global:
+                                pass
+                            else:
+                                md.append(metadata.evaluate(chorale_tranposed))
                     X.append(inputs)
+                    X_metadatas.append(md)
             else:
+                print("Warning: no transposition! shouldn't be used!")
                 inputs = chorale_to_inputs(chorale, num_voices=num_voices,
                                            index2notes=index2notes,
                                            note2indexes=note2indexes)
@@ -345,9 +442,10 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False):
                 # todo add fermatas here
         except (AttributeError, IndexError):
             pass
-    dataset = (X, num_voices, index2notes, note2indexes)
+
+    dataset = (X, X_metadatas, num_voices, index2notes, note2indexes)
     pickle.dump(dataset, open(dataset_name, 'wb'), pickle.HIGHEST_PROTOCOL)
-    print(str(len(X)) + 'files written in ' + dataset_name)
+    print(str(len(X)) + ' files written in ' + dataset_name)
 
 
 #
@@ -652,14 +750,16 @@ def initialization(dataset_path=None):
                                         num_voices=NUM_VOICES)
         pickled_dataset = 'datasets/custom_dataset/' + dataset_path.split('/')[-1] + '.pickle'
     else:
-        chorale_list = filter_file_list(corpus.getBachChorales(fileExtensions='xml'))
+        chorale_list = filter_file_list(corpus.getBachChorales(fileExtensions='xml')[:10])
         pickled_dataset = BACH_DATASET
 
     min_pitches, max_pitches = compute_min_max_pitches(chorale_list, voices=voice_ids)
 
     make_dataset(chorale_list, pickled_dataset,
                  num_voices=len(voice_ids),
-                 transpose=True)
+                 transpose=True,
+                 metadatas=[FermataMetadatas(),
+                            KeyMetadatas(windowSize=1)])
 
 
 if __name__ == '__main__':
