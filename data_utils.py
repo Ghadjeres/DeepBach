@@ -95,119 +95,6 @@ def compute_min_max_pitches(file_list, voices=[0]):
     return np.array(min_p), np.array(max_p)
 
 
-def part_to_list(part):
-    """
-
-    :rtype: np.ndarray
-    Returns (part_length, 2) matrix
-    t[0] = (pitch, articulation)
-    """
-    length = int(part.duration.quarterLength * SUBDIVISION)  # in 16th notes
-    list_notes = part.flat.notes
-    num_notes = len(list_notes)
-    j = 0
-    i = 0
-    t = np.zeros((length, 2))
-    is_articulated = True
-    while i < length:
-        if j < num_notes - 1:
-            if list_notes[j + 1].offset > i / SUBDIVISION:
-                t[i, :] = [list_notes[j].pitch.midi, is_articulated]
-                i += 1
-                is_articulated = False
-            else:
-                j += 1
-                is_articulated = True
-        else:
-            t[i, :] = [list_notes[j].pitch.midi, is_articulated]
-            i += 1
-            is_articulated = False
-    return t
-
-
-def part_to_list_with_fermata(part):
-    """
-    :rtype: np.ndarray
-    Returns (part_length, 3) matrix
-    t[0] = (pitch, articulation, fermata)
-    """
-    length = int(part.duration.quarterLength * SUBDIVISION)  # in 16th notes
-    list_notes = part.flat.notes
-    num_notes = len(list_notes)
-    j = 0
-    i = 0
-    t = np.zeros((length, 3))
-    is_articulated = True
-    fermata = False
-    while i < length:
-        if j < num_notes - 1:
-            if list_notes[j + 1].offset > i / SUBDIVISION:
-
-                if len(list_notes[j].expressions) == 1:
-                    fermata = True
-                else:
-                    fermata = False
-                # fermata = fermata and is_articulated
-
-                t[i, :] = [list_notes[j].pitch.midi, is_articulated, fermata]
-                i += 1
-                is_articulated = False
-            else:
-                j += 1
-                is_articulated = True
-        else:
-            if len(list_notes[j].expressions) == 1:
-                fermata = True
-            else:
-                fermata = False
-            # fermata = fermata and is_articulated
-
-            t[i, :] = [list_notes[j].pitch.midi, is_articulated, fermata]
-            i += 1
-            is_articulated = False
-    return t
-
-
-def chorale_to_inputs_with_fermata(chorale_file, num_voices=None):
-    """
-    Returns a numpy array [voices, time, (pitch, articulation, fermata)]
-    :param chorale_file:
-    :param num_voices:
-    :return:
-    """
-    mat = []
-    for voice_id in range(num_voices):
-        mat.append(chorale_to_input_with_fermata(chorale_file, voice_id=voice_id))
-    return np.array(mat)
-
-
-def chorale_to_input_with_fermata(chorale_file, voice_id=0):
-    """
-    Returns a list of [pitch, articulation, fermata]
-
-    """
-    choral = converter.parse(chorale_file)
-    part = choral.parts[voice_id]
-    sop = choral.parts[0]
-    # assert sop.id == 'Soprano'
-    sop = part_to_list_with_fermata(sop)
-    part = part_to_list_with_fermata(part)
-    # copy fermatas
-    for k, e in enumerate(sop):
-        part[k] = [part[k][0], part[k][1], e[2]]
-    return part
-
-
-def pitch_column_to_one_hot(col, MIN_PITCH, MAX_PITCH):
-    """
-    :param col:
-    :param MIN_PITCH: scalar !
-    :param MAX_PITCH: scalar !
-    :return:
-    """
-    return np.vectorize(lambda x: x in col)(np.arange(MIN_PITCH, MAX_PITCH + 1))
-
-
 def to_beat(time, timesteps=None):
     """
     time is given in the number of 16th notes
@@ -223,10 +110,10 @@ def to_beat(time, timesteps=None):
 
     if timesteps is None:
         return beat
-    left_beats = np.array(list(map(lambda x: p_to_onehot(x, 0, BEAT_SIZE - 1),
+    left_beats = np.array(list(map(lambda x: to_onehot(x, BEAT_SIZE),
                                    np.arange(time - timesteps, time) % BEAT_SIZE)))
 
-    right_beats = np.array(list(map(lambda x: p_to_onehot(x, 0, BEAT_SIZE - 1),
+    right_beats = np.array(list(map(lambda x: to_onehot(x, BEAT_SIZE),
                                     np.arange(time + timesteps, time, -1) % BEAT_SIZE)))
     return left_beats, np.array(beat), right_beats
 
@@ -241,15 +128,6 @@ def is_fermata(time):
     """
     # evenly spaced fermatas
     return (time // SUBDIVISION) % SPACING_FERMATAS < FERMATAS_LENGTH
-
-    # for god save the queen
-    # must add timesteps when
-    # fermatas_god = np.concatenate((np.arange(5 * 12, 6 * 12) + 16,
-    #                               np.arange(13 * 12, 14 * 12) + 16))
-    # return time in fermatas_god
-
-    # no fermata
-    # return 0
 
 
 def fermata_melody_to_fermata(time, timesteps=None, fermatas_melody=None):
@@ -266,16 +144,12 @@ def fermata_melody_to_fermata(time, timesteps=None, fermatas_melody=None):
     # custom formula for fermatas
     if fermatas_melody is None:
         print('Error in fermata_melody_to_fermata, fermatas_melody is None')
-    central_fermata = p_to_onehot(fermatas_melody[time], min_pitch=0, max_pitch=1)
+    central_fermata = to_onehot(fermatas_melody[time], 2)
     if timesteps is None:
         return central_fermata
-    fermatas_left = np.array(list(map(lambda f: p_to_onehot(f,
-                                                            min_pitch=0,
-                                                            max_pitch=1),
+    fermatas_left = np.array(list(map(lambda f: to_onehot(f, 2),
                                       fermatas_melody[time - timesteps: time])))
-    fermatas_right = np.array(list(map(lambda f: p_to_onehot(f,
-                                                             min_pitch=0,
-                                                             max_pitch=1),
+    fermatas_right = np.array(list(map(lambda f: to_onehot(f, 2),
                                        fermatas_melody[time + timesteps: time: -1])))
     return fermatas_left, central_fermata, fermatas_right
 
@@ -292,16 +166,12 @@ def to_fermata(time, timesteps=None):
     :return:
     """
     # custom formula for fermatas
-    central_fermata = p_to_onehot(is_fermata(time), min_pitch=0, max_pitch=1)
+    central_fermata = to_onehot(is_fermata(time), 2)
     if timesteps is None:
         return central_fermata
-    fermatas_left = np.array(list(map(lambda f: p_to_onehot(is_fermata(f),
-                                                            min_pitch=0,
-                                                            max_pitch=1),
+    fermatas_left = np.array(list(map(lambda f: to_onehot((is_fermata(time), 2)),
                                       np.arange(time - timesteps, time))))
-    fermatas_right = np.array(list(map(lambda f: p_to_onehot(is_fermata(f),
-                                                             min_pitch=0,
-                                                             max_pitch=1),
+    fermatas_right = np.array(list(map(lambda f: to_onehot((is_fermata(time), 2)),
                                        np.arange(time + timesteps, time, -1))))
     return fermatas_left, central_fermata, fermatas_right
 
@@ -370,142 +240,6 @@ def next_fermata_in(inputs, voice_id, index):
                 num = ((k - k % SUBDIVISION) - (index - index % SUBDIVISION)) / SUBDIVISION
                 break
     return np.array(list(map(lambda x: x == num, range(BITS_FERMATA))), dtype=np.int32)
-
-
-def input_to_feature_with_fermata(input, initial_beat=0):
-    return inputs_to_feature_with_fermata([input], voice_index=0, initial_beat=initial_beat)
-
-
-def input_to_feature(input, initial_beat=0):
-    return inputs_to_feature([input], voice_id=0, initial_beat=initial_beat)
-
-
-def feature_to_onehot_feature(feature, NUM_PITCHES, MIN_PITCH, MAX_PITCH):
-    """
-    must only apply onehot encoding to first column
-    """
-    onehot = np.zeros((feature.shape[0], NUM_PITCHES + feature.shape[1] - 1))
-    onehot[:, 0:NUM_PITCHES] = np.array(list(map(lambda col:
-                                                 pitch_column_to_one_hot(col, MIN_PITCH, MAX_PITCH),
-                                                 feature[:, 0][:, None])), dtype=np.int32)
-    onehot[:, NUM_PITCHES:] = feature[:, 1:]
-    return onehot
-
-
-def fusion_features(Xs, voice_index, file_index=None):
-    """
-    Balanced fusion. Covers all cases
-    if file_index is None: an element of Xs is given by
-    Xs[voice_index] [t, features]
-    else by
-    Xs[voice_index][file_index] [t, features]
-    Returns shorter sequences
-    """
-    if file_index is not None:
-        total_features = 0
-        # X[voice_index][file_index] [t, features]
-        for X in Xs:
-            total_features += X[file_index].shape[1] - BEAT_SIZE
-        total_features += BEAT_SIZE  # Because we keep one beat
-        fusion = np.zeros((Xs[voice_index][file_index].shape[0] - 1, total_features))
-
-        for k, vect in enumerate(Xs[voice_index][file_index][:-1, :]):
-            i = 0
-            for var_voice_index, X in enumerate(Xs):
-                feature = X[file_index]
-                if var_voice_index < voice_index:
-                    fusion[k, i:i + feature.shape[1] - BEAT_SIZE] = feature[k + 1, :-BEAT_SIZE]
-                    i += feature.shape[1] - BEAT_SIZE
-                elif var_voice_index > voice_index:
-                    fusion[k, i:i + feature.shape[1] - BEAT_SIZE] = feature[k, :-BEAT_SIZE]
-                    i += feature.shape[1] - BEAT_SIZE
-            # original features at the end
-            fusion[k, i:] = vect
-            assert i + len(vect) == total_features
-        # print(fusion.shape, voice_index)
-        return fusion
-    else:
-        total_features = 0
-        # X[voice_index][file_index] [t, features]
-        for X in Xs:
-            total_features += X.shape[1] - BEAT_SIZE
-            # print(X[file_index].shape[1])
-        total_features += BEAT_SIZE  # Because we keep one beat
-        fusion = np.zeros((Xs[voice_index].shape[0] - 1, total_features))
-
-        for k, vect in enumerate(Xs[voice_index][:-1, :]):
-            i = 0
-            for var_voice_index, X in enumerate(Xs):
-                feature = X
-                if var_voice_index < voice_index:
-                    fusion[k, i:i + feature.shape[1] - BEAT_SIZE] = feature[k + 1, :-BEAT_SIZE]
-                    i += feature.shape[1] - BEAT_SIZE
-                elif var_voice_index > voice_index:
-                    fusion[k, i:i + feature.shape[1] - BEAT_SIZE] = feature[k, :-BEAT_SIZE]
-                    i += feature.shape[1] - BEAT_SIZE
-            # original features at the end
-            fusion[k, i:] = vect
-            assert i + len(vect) == total_features
-        # print(fusion.shape, voice_index)
-        return fusion
-
-
-def fusion_features_with_fermata(Xs, voice_index, file_index=None):
-    """
-
-    """
-    num_last_bits_removed = BEAT_SIZE + BITS_FERMATA
-    if file_index is not None:
-        total_features = 0
-        # X[voice_index][file_index] [t, features]
-        for X in Xs:
-            total_features += X[file_index].shape[1] - num_last_bits_removed
-        total_features += num_last_bits_removed  # Because we keep one beat
-        fusion = np.zeros((Xs[voice_index][file_index].shape[0] - 1, total_features))
-
-        for k, vect in enumerate(Xs[voice_index][file_index][:-1, :]):
-            i = 0
-            for var_voice_index, X in enumerate(Xs):
-                feature = X[file_index]
-                if var_voice_index < voice_index:
-                    fusion[k, i:i + feature.shape[1] - num_last_bits_removed] = feature[k + 1, :-num_last_bits_removed]
-                    i += feature.shape[1] - num_last_bits_removed
-                elif var_voice_index > voice_index:
-                    fusion[k, i:i + feature.shape[1] - num_last_bits_removed] = feature[k, :-num_last_bits_removed]
-                    i += feature.shape[1] - num_last_bits_removed
-            # original features at the end
-            fusion[k, i:] = vect
-            assert i + len(vect) == total_features
-        # print(fusion.shape, voice_index)
-        return fusion
-    else:
-        total_features = 0
-        # X[voice_index][file_index] [t, features]
-        for X in Xs:
-            total_features += X.shape[1] - num_last_bits_removed
-            # print(X[file_index].shape[1])
-        total_features += num_last_bits_removed  # Because we keep one beat
-        fusion = np.zeros((Xs[voice_index].shape[0] - 1, total_features))
-
-        for k, vect in enumerate(Xs[voice_index][:-1, :]):
-            i = 0
-            for var_voice_index, X in enumerate(Xs):
-                feature = X
-                if var_voice_index < voice_index:
-                    fusion[k, i:i + feature.shape[1] - num_last_bits_removed] = feature[k + 1, :-num_last_bits_removed]
-                    i += feature.shape[1] - num_last_bits_removed
-                elif var_voice_index > voice_index:
-                    fusion[k, i:i + feature.shape[1] - num_last_bits_removed] = feature[k, :-num_last_bits_removed]
-                    i += feature.shape[1] - num_last_bits_removed
-            # original features at the end
-            fusion[k, i:] = vect
-            assert i + len(vect) == total_features
-        # print(fusion.shape, voice_index)
-        return fusion
-
-
-def list_to_array(X):
-    return np.concatenate(X).reshape((len(X),) + X[0].shape)
 
 
 def chorale_to_inputs(chorale, num_voices, index2notes, note2indexes):
@@ -616,157 +350,22 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False):
     print(str(len(X)) + 'files written in ' + dataset_name)
 
 
-def zero_padding(mat, size=16):
-    m = np.array(mat)
-    zeros_shape = (size,) + m.shape[1:]
-    return np.concatenate((np.zeros(zeros_shape),
-                           m,
-                           np.zeros(zeros_shape)))
-
-
-def convert_list_to_X(pitch_and_articulation_list, NUM_PITCHES, MIN_PITCH, MAX_PITCH, offset=0):
-    """
-    list of pitches, starting on offset
-    returns matrix length * num_features
-    """
-    return feature_to_onehot_feature(
-        input_to_feature(
-            pitch_and_articulation_list, initial_beat=offset), NUM_PITCHES, MIN_PITCH, MAX_PITCH)
-
-
-def pa_to_onehot(pa, min_pitch, max_pitch):
-    """
-    pitch and articulation tuple to onehot
-
-    returns a vector with two ones (pitch and articulation)
-    """
-
-    # continuation
-    if pa[A_INDEX] == 0:
-        return np.concatenate((np.zeros((max_pitch + 1 - min_pitch,)),
-                               np.array([1]))
-                              )
-    else:
-        return np.concatenate((
-            np.array(pa[P_INDEX] == np.arange(min_pitch, max_pitch + 1),
-                     dtype=np.float32),
-            np.array([0]))
-        )
-
-
-def paf_to_onehot(paf, min_pitch, max_pitch):
-    """
-    pitch and articulation and fermata tuple to onehot
-
-    returns a vector with possibly three ones (pitch and articulation)
-    """
-    # continuation
-    if paf[A_INDEX] == 0:
-        return np.concatenate((np.zeros((max_pitch + 1 - min_pitch,)),
-                               np.array([1]), np.array(paf[F_INDEX]))
-                              )
-    else:
-        return np.concatenate((
-            np.array(paf[P_INDEX] == np.arange(min_pitch, max_pitch + 1),
-                     dtype=np.float32),
-            np.array([0]), np.array(paf[F_INDEX]))
-        )
-
-
-def p_to_onehot(p, min_pitch, max_pitch):
-    """
-    pitch to one hot
-    :param p:
-    :param min_pitch:
-    :param max_pitch: included !
-    :return: np.array of shape (max_pitch - min_pitch + 1)
-    """
-    return np.array(p == np.arange(min_pitch, max_pitch + 1),
-                    dtype=np.float32)
+#
+# def p_to_onehot(p, min_pitch, max_pitch):
+#     """
+#     pitch to one hot
+#     :param p:
+#     :param min_pitch:
+#     :param max_pitch: included !
+#     :return: np.array of shape (max_pitch - min_pitch + 1)
+#     """
+#     return np.array(p == np.arange(min_pitch, max_pitch + 1),
+#                     dtype=np.float32)
 
 
 def to_onehot(index, num_indexes):
     return np.array(index == np.arange(0, num_indexes),
                     dtype=np.float32)
-
-
-def ps_to_onehot(ps, min_pitches, max_pitches):
-    """
-    list of pitches to one hot representation
-    :param ps: list of pitches
-    :param min_pitch:
-    :param max_pitch:
-    :return: np.array of shape (sum_len(ps), max_pitches - min_pitches + 1)
-    """
-    vects = []
-    for k, p in enumerate(ps):
-        vects.append(p_to_onehot(p, min_pitch=min_pitches[k], max_pitch=max_pitches[k]))
-    return np.concatenate(vects)
-
-
-def pas_to_onehot(pas, min_pitches, max_pitches):
-    """
-    list of (pitch, articulation)  tuple (one for each voice) to ONE onehot-encoded vector
-    :param pas:
-    :param min_pitches:
-    :param max_pitches:
-    :return:
-    """
-    vects = []
-    for k, pa in enumerate(pas):
-        vects.append(pa_to_onehot(pa, min_pitch=min_pitches[k], max_pitch=max_pitches[k]))
-    return np.concatenate(vects)
-
-
-def pafs_to_onehot(pafs, min_pitches, max_pitches):
-    """
-    list of (pitch, articulation, fermata)  tuple (one for each voice) to ONE onehot-encoded vector
-    :param pafs:
-    :param min_pitches:
-    :param max_pitches:
-    :return:
-    """
-    vects = []
-    for k, paf in enumerate(pafs):
-        vects.append(paf_to_onehot(paf, min_pitch=min_pitches[k], max_pitch=max_pitches[k]))
-    return np.concatenate(vects)
-
-
-def as_pas_to_as_ps(chorale_as_pas, min_pitches, max_pitches):
-    """
-    convert chorale (num_voices, time, 2) to chorale (num_voices, time) by adding a slur symbol
-    :return:
-    """
-    chorale_as_ps = np.zeros(chorale_as_pas.shape[:2])
-    for voice_index, voice in enumerate(chorale_as_pas):
-        for time_index, pa in enumerate(voice):
-            # continuation
-            if pa[A_INDEX] == 0:
-                chorale_as_ps[voice_index, time_index] = max_pitches[voice_index] + 1
-            else:
-                chorale_as_ps[voice_index, time_index] = pa[P_INDEX]
-    return chorale_as_ps
-
-
-def as_ps_to_as_pas(chorale_as_ps, min_pitches, max_pitches):
-    """
-    convert chorale (num_voices, time) to chorale (num_voices, time, 2) by removing slur symbol
-    max_pitches DO NOT INCLUDE slur_symbol_pitch
-    :return:
-    """
-    chorale_as_pas = np.zeros(chorale_as_ps.shape + (2,))
-    previous_pitch = 0
-    for voice_index, voice in enumerate(chorale_as_ps):
-        SLUR_SYMBOL_PITCH = max_pitches[voice_index] + 1
-        for time_index, p in enumerate(voice):
-            if not p == SLUR_SYMBOL_PITCH:
-                previous_pitch = p
-            # continuation
-            if p == SLUR_SYMBOL_PITCH:
-                chorale_as_pas[voice_index, time_index, :] = [previous_pitch, 0]
-            else:
-                chorale_as_pas[voice_index, time_index, :] = [previous_pitch, 1]
-    return chorale_as_pas
 
 
 def chorale_to_onehot(chorale, num_pitches):
@@ -817,141 +416,6 @@ def all_features(chorale, voice_index, time_index, timesteps, num_pitches, num_v
             np.array(right_feature),
             beat,
             np.array(label)
-            )
-
-
-def all_features_from_slur_chorale(chorale, voice_index, time_index, timesteps,
-                                   min_pitches, max_pitches, num_voices):
-    """
-
-    :param max_pitches: TRUE max_pitches from chorale_datasets
-    :param min_pitches: TRUE min_pitches from chorale_datasets
-    :param chorale:  (time, num_voices) numpy array
-    :return:
-            (left_feature,
-            central_feature,
-            right_feature,
-            beat,
-            label)
-    """
-
-    mask = np.array(voice_index == np.arange(num_voices), dtype=bool) == False
-
-    left_feature = chorale_to_onehot(chorale[time_index - timesteps:time_index, :], min_pitches=min_pitches,
-                                     max_pitches=max_pitches + 1, chorale_as_pas=False)
-
-    right_feature = chorale_to_onehot(chorale[time_index + timesteps: time_index: -1, :], min_pitches=min_pitches,
-                                      max_pitches=max_pitches + 1, chorale_as_pas=False)
-
-    central_feature = ps_to_onehot(chorale[time_index, mask],
-                                   min_pitches=min_pitches[mask],
-                                   max_pitches=max_pitches[mask] + 1)
-
-    # put timesteps=None to only have the current beat
-    beat = to_beat(time_index, timesteps=timesteps)
-
-    # if slur_symbol:
-    label = p_to_onehot(chorale[time_index, voice_index], min_pitch=min_pitches[voice_index],
-                        max_pitch=max_pitches[voice_index] + 1)
-
-    return (np.array(left_feature),
-            np.array(central_feature),
-            np.array(right_feature),
-            beat,
-            np.array(label)
-            )
-
-
-def all_features_from_pa_chorale(chorale, voice_index, time_index, timesteps,
-                                 min_pitches, max_pitches, num_voices):
-    """
-    :param num_voices:
-    :param max_pitches:
-    :param min_pitches:
-    :param timesteps:
-    :param time_index:
-    :param voice_index:
-    :param chorale:  (time, num_voices, 2) numpy array
-    :return:(left_feature,
-            central_feature,
-            right_feature,
-            beat,
-            label,
-            articulation) or
-            (left_feature,
-            central_feature,
-            right_feature,
-            beat,
-            label)
-             if slur_symbol is True
-    """
-    mask = np.array(voice_index == np.arange(num_voices), dtype=bool) == False
-    left_feature = chorale_to_onehot(chorale[time_index - timesteps:time_index, :, :], min_pitches=min_pitches,
-                                     max_pitches=max_pitches, fermatas=False)
-    # In reverse order !
-    right_feature = chorale_to_onehot(chorale[time_index + timesteps: time_index: -1, :, :],
-                                      min_pitches=min_pitches,
-                                      max_pitches=max_pitches, fermatas=False)
-
-    central_feature = pas_to_onehot(chorale[time_index, mask, :], min_pitches=min_pitches[mask],
-                                    max_pitches=max_pitches[mask])
-
-    beat = to_beat(time_index, timesteps=timesteps)
-
-    label = pa_to_onehot(chorale[time_index, voice_index, :], min_pitch=min_pitches[voice_index],
-                         max_pitch=max_pitches[voice_index])
-    return (np.array(left_feature),
-            np.array(central_feature),
-            np.array(right_feature),
-            np.array(beat),
-            np.array(label),
-            )
-
-
-def all_features_from_pa_chorale_with_fermatas(chorale, voice_index, time_index, timesteps, min_pitches,
-                                               max_pitches,
-                                               num_voices):
-    """
-        This function adds fermatas =(fermata_left, central_fermata, fermata_right)
-
-        :param chorale:  (time, num_voices, 3) numpy array
-        :returns
-                (left_feature,
-                central_feature,
-                right_feature,
-                beat,
-                label)
-        """
-    mask = np.array(voice_index == np.arange(num_voices), dtype=bool) == False
-    left_feature = chorale_to_onehot(chorale[time_index - timesteps:time_index, :, :F_INDEX],
-                                     min_pitches=min_pitches,
-                                     max_pitches=max_pitches, fermatas=False)
-
-    right_feature = chorale_to_onehot(chorale[time_index + timesteps: time_index: -1, :, :F_INDEX],
-                                      min_pitches=min_pitches, max_pitches=max_pitches, fermatas=False)
-
-    central_feature = pas_to_onehot(chorale[time_index, mask, :F_INDEX], min_pitches=min_pitches[mask],
-                                    max_pitches=max_pitches[mask])
-
-    # beat is a tuple (left_beats, beat, right_beats) or only beat if timesteps is None
-    beat = to_beat(time_index, timesteps=timesteps)
-
-    # only need to retain fermatas from soprano
-    fermatas = (list(map(lambda p: p_to_onehot(p, min_pitch=0, max_pitch=1),
-                         chorale[time_index - timesteps:time_index, 0, F_INDEX])),
-                p_to_onehot(chorale[time_index, 0, F_INDEX], 0, 1),
-                list(map(lambda p: p_to_onehot(p, min_pitch=0, max_pitch=1),
-                         chorale[time_index + timesteps: time_index: -1, 0, F_INDEX]))
-                )
-
-    label = pa_to_onehot(chorale[time_index, voice_index, :], min_pitch=min_pitches[voice_index],
-                         max_pitch=max_pitches[voice_index])
-    return (np.array(left_feature),
-            np.array(central_feature),
-            np.array(right_feature),
-            np.array(beat),
-            np.array(label),
-            np.array(fermatas)
             )
 
 
@@ -1043,212 +507,6 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
             beats_left = []
             beats_right = []
             labels = []
-
-
-def create_batch_generator(X, y, BATCH_SIZE, TIMESTEPS,
-                           NUM_PITCHES, MIN_PITCH, MAX_PITCH,
-                           y_onehot=True, phase='train', percentage_train=0.8):
-    """
-    X is a list of chorals
-    Returns (input (BATCH_SIZE, TIMESTEPS, NUM_FEATURES),
-            labels (BATCH_SIZE, TIMESTEPS, num_pitches),
-            replayed (BATCH_SIZE, TIMESTEPS, 2))
-
-    :param y_onehot: True for onehot encoded output
-    :param phase: 'train' or 'test'
-    """
-    inputs = []
-    labels = []
-    articulations = []
-    batch = 0
-    if phase == 'train':
-        chorale_indices = np.arange(int(len(X) * percentage_train))
-    if phase == 'test':
-        chorale_indices = np.arange(int(len(X) * percentage_train), len(X))
-
-    while True:
-        choral_index = np.random.choice(chorale_indices)
-        time_index = np.random.randint(y[choral_index].shape[0] - TIMESTEPS)
-
-        inputs.append(X[choral_index][time_index:time_index + TIMESTEPS, :])
-        # Retain pitch
-        label = y[choral_index][time_index:time_index + TIMESTEPS, 0][:, None]
-        # Retain articulation
-        articulation = y[choral_index][time_index:time_index + TIMESTEPS, 1][:, None]
-
-        if y_onehot:
-            label = feature_to_onehot_feature(label, NUM_PITCHES, MIN_PITCH, MAX_PITCH)
-            articulation = feature_to_onehot_feature(articulation, 2, 0, 1)
-
-        labels.append(label)
-        articulations.append(articulation)
-
-        batch += 1
-
-        # if there is a full batch
-        if batch == BATCH_SIZE:
-            yield (np.array(inputs, dtype=np.float32),
-                   np.array(labels, dtype=np.int32),
-                   np.array(articulations, dtype=np.int32))
-            batch = 0
-            inputs = []
-            labels = []
-            articulations = []
-
-
-def create_batch_generator_reharmo(X, y, voice_index,
-                                   BATCH_SIZE, TIMESTEPS,
-                                   MIN_PITCH, MAX_PITCH, NUM_PITCHES, given_voices,
-                                   y_onehot=True, phase='train', percentage_train=0.8):
-    """
-    X is a list of chorals
-    Returns (input (BATCH_SIZE, TIMESTEPS, NUM_FEATURES),
-            labels (BATCH_SIZE, num_pitches),
-            replayed (BATCH_SIZE, 2))
-
-    WARNING: sequences in X,y are padded with 16 zeros at the beginning and at the end
-    given_voices MUST be at the beginning of voice_ids when building dataset
-
-    :param voice_index: index of voice in voice_ids
-    :param y_onehot: True for onehot encoded output
-    :param phase: 'train' or 'test'
-    """
-    inputs = []
-    labels = []
-    articulations = []
-    imposed_voices = []
-    num_bits_imposed_voices = 0
-    for k, voice in enumerate(given_voices):
-        num_bits_imposed_voices += NUM_PITCHES[k]
-    batch = 0
-    if phase == 'train':
-        chorale_indices = np.arange(int(len(X) * percentage_train))
-    elif phase == 'test':
-        chorale_indices = np.arange(int(len(X) * percentage_train), len(X))
-    else:
-        raise ValueError
-    while True:
-        choral_index = np.random.choice(chorale_indices)
-        time_index = np.random.randint(y[choral_index].shape[0] - 2 * TIMESTEPS)
-
-        inputs.append(X[choral_index][time_index:time_index + TIMESTEPS, :])
-        # Retain pitch (one for each timestep)
-        label = y[choral_index][time_index:time_index + TIMESTEPS, 0][:, None]
-        # Retain articulation (one for each timestep)
-        articulation = y[choral_index][time_index:time_index + TIMESTEPS, 1][:, None]
-        # Add right part of imposed melodies in reversed order
-        imposed_voice = (X[choral_index]
-                         [time_index + 2 * TIMESTEPS - 1:
-                         time_index + TIMESTEPS - 1: -1, :num_bits_imposed_voices])
-
-        if y_onehot:
-            label = feature_to_onehot_feature(label, NUM_PITCHES[voice_index], MIN_PITCH[voice_index],
-                                              MAX_PITCH[voice_index])
-            articulation = feature_to_onehot_feature(articulation, 2, 0, 1)
-
-        labels.append(label[-1])
-        articulations.append(articulation[-1])
-        imposed_voices.append(imposed_voice)
-
-        batch += 1
-
-        # if there is a full batch
-        if batch == BATCH_SIZE:
-            yield (np.array(inputs, dtype=np.float32),
-                   np.array(imposed_voices, dtype=np.float32),
-                   np.array(labels, dtype=np.int32),
-                   np.array(articulations, dtype=np.int32))
-            batch = 0
-            inputs = []
-            labels = []
-            articulations = []
-            imposed_voices = []
-
-
-def create_batch_generator_full(X, y, BATCH_SIZE, TIMESTEPS):
-    """
-    X is a list of chorals
-    Returns input (BATCH_SIZE, TIMESTEPS, NUM_FEATURES),
-            labels (BATCH_SIZE, TIMESTEPS, 2) #retains pitch and articulation
-    """
-    input = []
-    labels = []
-    batch = 0
-    while True:
-        choral_index = np.random.randint(len(X))
-        time_index = np.random.randint(y[choral_index].shape[0] - TIMESTEPS)
-        # if there is a full batch
-        input.append(X[choral_index][time_index:time_index + TIMESTEPS, :])
-        labels.append(y[choral_index][time_index:time_index + TIMESTEPS, :])  # Retain pitch and articulation
-        batch += 1
-        if batch == BATCH_SIZE:
-            yield np.array(input, dtype=np.float32), np.array(labels, dtype=np.int32)
-            batch = 0
-            input = []
-            labels = []
-
-
-def create_batch_generator_one_hot(X, y, BATCH_SIZE, TIMESTEPS, NUM_PITCHES, MIN_PITCH, MAX_PITCH):
-    """
-    X is a list of chorals
-    Returns input (BATCH_SIZE, TIMESTEPS, NUM_FEATURES),
-            labels (BATCH_SIZE, TIMESTEPS, num_pitches)
-
-    :param X:
-    :param y:
-    :param BATCH_SIZE:
-    :param TIMESTEPS:
-    :param NUM_PITCHES:
-    :param MIN_PITCH:
-    :param MAX_PITCH:
-    """
-    input = []
-    labels = []
-    batch = 0
-    while True:
-        choral_index = np.random.randint(len(X))
-        time_index = np.random.randint(y[choral_index].shape[0] - TIMESTEPS)
-        # if there is a full batch
-        input.append(X[choral_index][time_index:time_index + TIMESTEPS, :])
-        labels.append(feature_to_onehot_feature(y[choral_index][time_index:time_index + TIMESTEPS, 0][:, None],
-                                                NUM_PITCHES, MIN_PITCH, MAX_PITCH))  # Retain pitch
-        batch += 1
-        if batch == BATCH_SIZE:
-            yield np.array(input, dtype=np.float32), np.array(labels, dtype=np.int32)
-            batch = 0
-            input = []
-            labels = []
-
-
-def create_generator_one_hot(X, y, TIMESTEPS, NUM_PITCHES, MIN_PITCH, MAX_PITCH):
-    """
-    X is a list of chorals
-    Returns input (TIMESTEPS, NUM_FEATURES),
-            labels (TIMESTEPS, num_pitches)
-    """
-    input = []
-    labels = []
-    batch = 0
-    while True:
-        choral_index = np.random.randint(len(X))
-        time_index = np.random.randint(y[choral_index].shape[0] - TIMESTEPS)
-        # if there is a full batch
-        yield (X[choral_index][time_index:time_index + TIMESTEPS, :],
-               feature_to_onehot_feature(y[choral_index][time_index:time_index + TIMESTEPS, 0][:, None],
-                                         NUM_PITCHES, MIN_PITCH, MAX_PITCH))
-
-
-def translate_y(y, num_semitones):
-    """
-    Translates only the first column of each member of the list
-    """
-    yy = []
-    for chorale in y:
-        new_chorale = np.array(chorale)
-        new_chorale[:, 1:] = chorale[:, 1:]
-        new_chorale[:, 0] = chorale[:, 0] + num_semitones
-        yy.append(new_chorale)
-    return yy
 
 
 def seq_to_stream(seq):

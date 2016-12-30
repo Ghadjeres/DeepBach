@@ -19,9 +19,9 @@ from tqdm import tqdm
 
 from data_utils import BEAT_SIZE, \
     seq_to_stream, BITS_FERMATA, \
-    part_to_list, generator_from_raw_dataset, BACH_DATASET, all_features, \
+    generator_from_raw_dataset, BACH_DATASET, all_features, \
     F_INDEX, to_fermata, indexed_chorale_to_score, fermata_melody_to_fermata, \
-    seqs_to_stream, as_ps_to_as_pas, initialization, as_pas_to_as_ps, START_SYMBOL, END_SYMBOL, part_to_inputs, \
+    seqs_to_stream, initialization, START_SYMBOL, END_SYMBOL, part_to_inputs, \
     NUM_VOICES
 
 from fast_weights.fw.fast_weights_layer import FastWeights
