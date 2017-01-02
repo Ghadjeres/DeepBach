@@ -331,6 +331,13 @@ def next_fermata_in(inputs, voice_id, index):
 
 
 def chorale_to_inputs(chorale, num_voices, index2notes, note2indexes):
+    """
+    :param chorale: music21 chorale
+    :param num_voices:
+    :param index2notes:
+    :param note2indexes:
+    :return: (num_voices, time) matrix of indexes
+    """
     inputs = []
     for voice_index in range(num_voices):
         inputs.append(part_to_inputs(chorale.parts[voice_index], index2notes[voice_index], note2indexes[voice_index]))
