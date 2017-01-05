@@ -638,6 +638,27 @@ def initialization(dataset_path=None, metadatas=None):
                  metadatas=metadatas)
 
 
+# specific methods when number of rests
+def split_note(n, max_length):
+    """
+    :param n:
+    :param max_length: in quarter length
+    :return:
+    """
+    if n.duration.quarterLength > max_length:
+        l = []
+        o = n.offset
+        while o < n.offset + max_length:
+            # new note
+            f = standard_note(standard_name(n))
+            new_length = max_length - o % max_length
+            f.duration.quarterLength = (new_length)
+            l.append(f)
+            o = new_length
+    else:
+        return [n]
+
+
 if __name__ == '__main__':
     num_voices = 4
     make_dataset(None, BACH_DATASET, num_voices=4, transpose=False)
