@@ -18,11 +18,12 @@ from music21 import midi, converter
 from tqdm import tqdm
 
 from DeepBach.data_utils import BEAT_SIZE, \
-    seq_to_stream, BITS_FERMATA, \
+    BITS_FERMATA, \
     generator_from_raw_dataset, BACH_DATASET, all_features, \
-    F_INDEX, indexed_chorale_to_score, \
-    seqs_to_stream, initialization, START_SYMBOL, END_SYMBOL, part_to_inputs, \
-    NUM_VOICES, FermataMetadatas, KeyMetadatas, all_metadatas
+    indexed_chorale_to_score, \
+    initialization, START_SYMBOL, END_SYMBOL, part_to_inputs, \
+    NUM_VOICES, all_metadatas
+from metadata import *
 
 from fast_weights.fw.fast_weights_layer import FastWeights
 
@@ -420,119 +421,120 @@ def skip_nofermata(num_features_lr, num_features_c, num_pitches, num_units_lstm=
     return model
 
 
-def gibbs(models=None, melody=None, fermatas_melody=None, sequence_length=50, num_iterations=1000,
-          timesteps=16,
-          model_base_name='models/raw_dataset/tmp/',
-          num_voices=4, temperature=1., min_pitches=None,
-          max_pitches=None, initial_seq=None,
-          pickled_dataset=BACH_DATASET):
-    """
-    samples from models in model_base_name
-
-    """
-    X, X_metadatas, min_pitches, max_pitches, num_voices = pickle.load(open(pickled_dataset, 'rb'))
-
-    # load models if not
-    if models is None:
-        for expert_index in range(num_voices):
-            model_name = model_base_name + str(expert_index)
-
-            model = load_model(model_name=model_name, yaml=False)
-            models.append(model)
-
-    # initialization sequence
-    if melody is not None:
-        sequence_length = len(melody)
-
-    if fermatas_melody is not None:
-        sequence_length = len(fermatas_melody)
-        if melody is not None:
-            assert len(melody) == len(fermatas_melody)
-
-    seq = np.zeros(shape=(2 * timesteps + sequence_length, num_voices))
-    for expert_index in range(num_voices):
-        # Add slur_symbol
-        seq[timesteps:-timesteps, expert_index] = np.random.random_integers(min_pitches[expert_index],
-                                                                            max_pitches[expert_index] + 1,
-                                                                            size=sequence_length)
-
-    if initial_seq is not None:
-        seq = initial_seq
-        min_voice = 1
-        # works only with reharmonization
-
-    # melody = X[-1][0, :, 0]
-    # melody is pa !
-    if melody is not None:
-        seq[timesteps:-timesteps, 0] = melody[:, 0]
-        mask = melody[:, 1] == 0
-        seq[timesteps:-timesteps, 0][mask] = max_pitches[0] + 1
-        min_voice = 1
-    else:
-        min_voice = 0
-
-    if fermatas_melody is not None:
-        fermatas_melody = np.concatenate((np.zeros((timesteps,)),
-                                          fermatas_melody,
-                                          np.zeros((timesteps,)))
-                                         )
-
-    min_temperature = temperature
-    temperature = 1.2
-    # Main loop
-    for iteration in tqdm(range(num_iterations)):
-
-        temperature = max(min_temperature, temperature * 0.99996)  # Recuit
-
-        voice_index = np.random.randint(min_voice, num_voices)
-        time_index = np.random.randint(timesteps, sequence_length + timesteps)
-
-        (left_feature,
-         central_feature,
-         right_feature,
-         (beats_left, beat, beats_right),
-         label) = all_features(seq, voice_index, time_index, timesteps, min_pitches, max_pitches, chorale_as_pas=False)
-
-        input_features = {'left_features': left_feature[None, :, :],
-                          'central_features': central_feature[None, :],
-                          'right_features': right_feature[None, :, :],
-                          'beat': beat[None, :],
-                          'beats_left': beats_left[None, :, :],
-                          'beats_right': beats_right[None, :, :]}
-
-        # add fermatas evenly spaced
-        if fermatas_melody is None:
-            (fermatas_left,
-             central_fermata,
-             fermatas_right) = to_fermata(time_index, timesteps=timesteps)
-            input_features.update({'fermatas_left': fermatas_left[None, :, :],
-                                   'central_fermata': central_fermata[None, :],
-                                   'fermatas_right': fermatas_right[None, :, :]
-                                   })
-        else:
-            (fermatas_left,
-             central_fermata,
-             fermatas_right) = fermata_melody_to_fermata(time_index, timesteps=timesteps,
-                                                         fermatas_melody=fermatas_melody)
-            input_features.update({'fermatas_left': fermatas_left[None, :, :],
-                                   'central_fermata': central_fermata[None, :],
-                                   'fermatas_right': fermatas_right[None, :, :]
-                                   })
-
-        probas = models[voice_index].predict(input_features, batch_size=1)
-
-        probas_pitch = probas[0]
-
-        # use temperature
-        probas_pitch = np.log(probas_pitch) / temperature
-        probas_pitch = np.exp(probas_pitch) / np.sum(np.exp(probas_pitch)) - 1e-7
-
-        # pitch can include slur_symbol
-        pitch = np.argmax(np.random.multinomial(1, probas_pitch)) + min_pitches[voice_index]
-
-        seq[time_index, voice_index] = pitch
-
-    return seq[timesteps:-timesteps, :]
+#
+# def gibbs(models=None, melody=None, fermatas_melody=None, sequence_length=50, num_iterations=1000,
+#           timesteps=16,
+#           model_base_name='models/raw_dataset/tmp/',
+#           num_voices=4, temperature=1., min_pitches=None,
+#           max_pitches=None, initial_seq=None,
+#           pickled_dataset=BACH_DATASET):
+#     """
+#     samples from models in model_base_name
+#
+#     """
+#     X, X_metadatas, min_pitches, max_pitches, num_voices = pickle.load(open(pickled_dataset, 'rb'))
+#
+#     # load models if not
+#     if models is None:
+#         for expert_index in range(num_voices):
+#             model_name = model_base_name + str(expert_index)
+#
+#             model = load_model(model_name=model_name, yaml=False)
+#             models.append(model)
+#
+#     # initialization sequence
+#     if melody is not None:
+#         sequence_length = len(melody)
+#
+#     if fermatas_melody is not None:
+#         sequence_length = len(fermatas_melody)
+#         if melody is not None:
+#             assert len(melody) == len(fermatas_melody)
+#
+#     seq = np.zeros(shape=(2 * timesteps + sequence_length, num_voices))
+#     for expert_index in range(num_voices):
+#         # Add slur_symbol
+#         seq[timesteps:-timesteps, expert_index] = np.random.random_integers(min_pitches[expert_index],
+#                                                                             max_pitches[expert_index] + 1,
+#                                                                             size=sequence_length)
+#
+#     if initial_seq is not None:
+#         seq = initial_seq
+#         min_voice = 1
+#         # works only with reharmonization
+#
+#     # melody = X[-1][0, :, 0]
+#     # melody is pa !
+#     if melody is not None:
+#         seq[timesteps:-timesteps, 0] = melody[:, 0]
+#         mask = melody[:, 1] == 0
+#         seq[timesteps:-timesteps, 0][mask] = max_pitches[0] + 1
+#         min_voice = 1
+#     else:
+#         min_voice = 0
+#
+#     if fermatas_melody is not None:
+#         fermatas_melody = np.concatenate((np.zeros((timesteps,)),
+#                                           fermatas_melody,
+#                                           np.zeros((timesteps,)))
+#                                          )
+#
+#     min_temperature = temperature
+#     temperature = 1.2
+#     # Main loop
+#     for iteration in tqdm(range(num_iterations)):
+#
+#         temperature = max(min_temperature, temperature * 0.99996)  # Recuit
+#
+#         voice_index = np.random.randint(min_voice, num_voices)
+#         time_index = np.random.randint(timesteps, sequence_length + timesteps)
+#
+#         (left_feature,
+#          central_feature,
+#          right_feature,
+#          (beats_left, beat, beats_right),
+#          label) = all_features(seq, voice_index, time_index, timesteps, min_pitches, max_pitches, chorale_as_pas=False)
+#
+#         input_features = {'left_features': left_feature[None, :, :],
+#                           'central_features': central_feature[None, :],
+#                           'right_features': right_feature[None, :, :],
+#                           'beat': beat[None, :],
+#                           'beats_left': beats_left[None, :, :],
+#                           'beats_right': beats_right[None, :, :]}
+#
+#         # add fermatas evenly spaced
+#         if fermatas_melody is None:
+#             (fermatas_left,
+#              central_fermata,
+#              fermatas_right) = to_fermata(time_index, timesteps=timesteps)
+#             input_features.update({'fermatas_left': fermatas_left[None, :, :],
+#                                    'central_fermata': central_fermata[None, :],
+#                                    'fermatas_right': fermatas_right[None, :, :]
+#                                    })
+#         else:
+#             (fermatas_left,
+#              central_fermata,
+#              fermatas_right) = fermata_melody_to_fermata(time_index, timesteps=timesteps,
+#                                                          fermatas_melody=fermatas_melody)
+#             input_features.update({'fermatas_left': fermatas_left[None, :, :],
+#                                    'central_fermata': central_fermata[None, :],
+#                                    'fermatas_right': fermatas_right[None, :, :]
+#                                    })
+#
+#         probas = models[voice_index].predict(input_features, batch_size=1)
+#
+#         probas_pitch = probas[0]
+#
+#         # use temperature
+#         probas_pitch = np.log(probas_pitch) / temperature
+#         probas_pitch = np.exp(probas_pitch) / np.sum(np.exp(probas_pitch)) - 1e-7
+#
+#         # pitch can include slur_symbol
+#         pitch = np.argmax(np.random.multinomial(1, probas_pitch)) + min_pitches[voice_index]
+#
+#         seq[time_index, voice_index] = pitch
+#
+#     return seq[timesteps:-timesteps, :]
 
 
 def parallelGibbs(models=None, melody=None, chorale_metas=None, sequence_length=50, num_iterations=1000,
@@ -719,7 +721,7 @@ def create_models(model_name=None, create_new=False, num_dense=200, num_units_ls
     num_pitches = list(map(len, index2notes))
     for voice_index in range(num_voices):
         # We only need one example for features dimensions
-        gen = generator_from_raw_dataset(batch_size=batch_size, timesteps=timesteps, metadatas=metadatas,
+        gen = generator_from_raw_dataset(batch_size=1, timesteps=timesteps, metadatas=metadatas,
                                          voice_index=voice_index, pickled_dataset=pickled_dataset)
 
         (left_features,
@@ -854,101 +856,6 @@ def train_models(model_name, samples_per_epoch, num_epochs, nb_val_samples, time
 
         save_model(model, model_path_name, overwrite=True)
     return models
-
-
-def export_reharmo_turing_test(model_base_name, models, min_pitches, max_pitches, melodies_and_fermatas,
-                               num_iterations=10000, temperature=1.0, fermatas=True, export_directory=None,
-                               timesteps=None, in_one_file=False
-                               ):
-    """
-    Helper functions to create Bach or Computer extracts
-    """
-    if in_one_file:
-        seqs = []
-    for k, (melody, fermatas_melody) in enumerate(melodies_and_fermatas):
-        seq = gibbs(models=models, model_base_name=model_base_name,
-                    melody=melody, fermatas_melody=fermatas_melody,
-                    num_iterations=num_iterations, sequence_length=160,
-                    timesteps=timesteps,
-                    min_pitches=min_pitches, max_pitches=max_pitches, temperature=temperature,
-                    initial_seq=None)
-        if in_one_file:
-            seqs.append(as_ps_to_as_pas(np.transpose(seq[timesteps:-timesteps, :], axes=(1, 0)),
-                                        min_pitches, max_pitches))
-
-        score = indexed_chorale_to_score(np.transpose(seq[timesteps:-timesteps, :], axes=(1, 0)),
-                                         min_pitches, max_pitches)
-
-        mf = midi.translate.music21ObjectToMidiFile(score)
-        # versioning
-        version = 1
-        midi_file_name = export_directory + str(k) + '_v' + str(version) + ".mid"
-        while (os.path.exists(midi_file_name)):
-            version += 1
-            midi_file_name = export_directory + str(k) + '_v' + str(version) + ".mid"
-        mf.open(midi_file_name, 'wb')
-        mf.write()
-        mf.close()
-
-    if in_one_file:
-        score = seqs_to_stream(seqs)
-        mf = midi.translate.music21ObjectToMidiFile(score)
-        # versioning
-        version = 1
-        midi_file_name = export_directory + 'all' + '_v' + str(version) + ".mid"
-        while (os.path.exists(midi_file_name)):
-            version += 1
-            midi_file_name = export_directory + 'all' + str(k) + '_v' + str(version) + ".mid"
-        mf.open(midi_file_name, 'wb')
-        mf.write()
-        mf.close()
-
-
-def export_bach_turing_test(chorale_list, export_directory, in_one_file=False):
-    for k, chorale in enumerate(chorale_list):
-        score = seq_to_stream(chorale[:, :, :F_INDEX])
-        mf = midi.translate.music21ObjectToMidiFile(score)
-        midi_file_name = export_directory + str(k) + ".mid"
-        mf.open(midi_file_name, 'wb')
-        mf.write()
-        mf.close()
-
-    if in_one_file:
-        seqs = []
-        for k, chorale in enumerate(chorale_list):
-            seqs.append(chorale[:, :, :F_INDEX])
-
-        score = seqs_to_stream(seqs)
-
-        mf = midi.translate.music21ObjectToMidiFile(score)
-        midi_file_name = export_directory + 'all_chorales' + ".mid"
-        mf.open(midi_file_name, 'wb')
-        mf.write()
-        mf.close()
-
-
-# todo to remove
-def update(positions, delta, rho, max_position, num_iterations=1):
-    for _ in range(num_iterations):
-        k = random.randrange(len(positions))
-        dk = random.randint(-delta, delta)
-
-        # min_position is 0
-        if k > 0:
-            left_boundary = positions[k - 1] + rho
-        else:
-            left_boundary = 0
-
-        # max_position is max_position
-        if k == len(positions) - 1:
-            right_boundary = max_position
-        else:
-            right_boundary = positions[k + 1] - rho
-
-        if left_boundary <= positions[k] + dk <= right_boundary:
-            positions[k] += dk
-
-    return positions
 
 
 def main():
