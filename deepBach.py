@@ -540,29 +540,30 @@ def create_models(model_name=None, create_new=False, num_dense=200, num_units_ls
     :return:
     """
 
-    _, _, _, index2notes, _ = pickle.load(open(pickled_dataset, 'rb'))
+    _, _, _, index2notes, _, _ = pickle.load(open(pickled_dataset, 'rb'))
     num_pitches = list(map(len, index2notes))
     for voice_index in range(num_voices):
         # We only need one example for features dimensions
-        gen = generator_from_raw_dataset(batch_size=1, timesteps=timesteps, metadatas=metadatas,
-                                         voice_index=voice_index, pickled_dataset=pickled_dataset)
+        gen = generator_from_raw_dataset(batch_size=1, timesteps=timesteps, voice_index=voice_index,
+                                         pickled_dataset=pickled_dataset)
 
-        (left_features,
-         central_features,
-         right_features,
-         beats,
-         metas,
-         labels) = next(gen)
+        (
+            (left_features,
+             central_features,
+             right_features),
+            (left_metas, central_metas, right_metas),
+            labels) = next(gen)
 
         if 'deepbach' in model_name:
             model = deepBach(num_features_lr=left_features.shape[-1],
                              num_features_c=central_features.shape[-1],
                              num_pitches=num_pitches[voice_index],
+                             num_features_meta=left_metas.shape[-1],
                              num_dense=num_dense, num_units_lstm=num_units_lstm)
         elif 'skip' in model_name:
             model = skip(num_features_lr=left_features.shape[-1],
                          num_features_c=central_features.shape[-1],
-                         num_features_meta=metas[0].shape[-1],
+                         num_features_meta=left_metas.shape[-1],
                          num_pitches=num_pitches[voice_index],
                          num_dense=num_dense, num_units_lstm=num_units_lstm, timesteps=timesteps)
         else:
@@ -606,23 +607,17 @@ def train_models(model_name, samples_per_epoch, num_epochs, nb_val_samples, time
         generator_train = (({'left_features': left_features,
                              'central_features': central_features,
                              'right_features': right_features,
-                             'beat': beat,
-                             'beats_left': beats_left,
-                             'beats_right': beats_right,
                              'left_metas': left_metas,
                              'right_metas': right_metas,
                              'central_metas': central_metas,
                              },
                             {'pitch_prediction': labels})
-                           for (left_features,
-                                central_features,
-                                right_features,
-                                (beats_left, beat, beats_right),
-                                (left_metas, central_metas, right_metas),
-                                labels)
+                           for (
+                               (left_features, central_features, right_features),
+                               (left_metas, central_metas, right_metas),
+                               labels)
 
-                           in generator_from_raw_dataset(batch_size=batch_size, metadatas=metadatas,
-                                                         timesteps=timesteps,
+                           in generator_from_raw_dataset(batch_size=batch_size, timesteps=timesteps,
                                                          voice_index=voice_index,
                                                          phase='train',
                                                          pickled_dataset=pickled_dataset
@@ -631,23 +626,17 @@ def train_models(model_name, samples_per_epoch, num_epochs, nb_val_samples, time
         generator_val = (({'left_features': left_features,
                            'central_features': central_features,
                            'right_features': right_features,
-                           'beat': beat,
-                           'beats_left': beats_left,
-                           'beats_right': beats_right,
                            'left_metas': left_metas,
                            'right_metas': right_metas,
-                           'central_metas': central_metas
+                           'central_metas': central_metas,
                            },
                           {'pitch_prediction': labels})
-                         for (left_features,
-                              central_features,
-                              right_features,
-                              (beats_left, beat, beats_right),
-                              (left_metas, central_metas, right_metas),
-                              labels)
+                         for (
+                             (left_features, central_features, right_features),
+                             (left_metas, central_metas, right_metas),
+                             labels)
 
-                         in generator_from_raw_dataset(batch_size=batch_size, metadatas=metadatas,
-                                                       timesteps=timesteps,
+                         in generator_from_raw_dataset(batch_size=batch_size, timesteps=timesteps,
                                                        voice_index=voice_index,
                                                        phase='train',
                                                        pickled_dataset=pickled_dataset
@@ -693,7 +682,7 @@ def main():
                         type=int, default=200)
     parser.add_argument('-n', '--name',
                         help='model name (default: %(default)s)',
-                        choices=['deepbach', 'mlp', 'maxent', 'fastbach', 'skip', 'skipnof'],
+                        choices=['deepbach', 'skip'],
                         type=str, default='deepbach')
     parser.add_argument('-i', '--num_iterations',
                         help='number of gibbs iterations (default: %(default)s)',
@@ -728,13 +717,13 @@ def main():
     args = parser.parse_args()
     print(args)
 
-    # fixed set of metadatas to use
+    # fixed set of metadatas to use when CREATING the dataset
     # metadatas = [FermataMetadatas(), KeyMetadatas(windowSize=1), TickMetadatas(SUBDIVISION), ModeMetadatas()]
-    metadatas = [TickMetadatas(), FermataMetadatas()]
+    metadatas = [TickMetadatas(SUBDIVISION), FermataMetadatas()]
 
     # datasets
 
-    # change BACH_DATASET constant i argument is present
+    # set pickled_dataset argument
     if args.dataset:
         dataset_path = args.dataset
         dataset_name = dataset_path.split('/')[-1]
@@ -747,8 +736,8 @@ def main():
                        metadatas=metadatas)
 
     # load dataset
-    X, X_metadatas, num_voices, index2notes, note2indexes = pickle.load(open(pickled_dataset,
-                                                                             'rb'))
+    X, X_metadatas, num_voices, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset,
+                                                                                        'rb'))
     num_pitches = list(map(len, index2notes))
     timesteps = args.timesteps
     batch_size = args.batch_size_train

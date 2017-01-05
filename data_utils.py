@@ -6,6 +6,7 @@ Created on 7 mars 2016
 @author: Gaetan Hadjeres
 """
 import pickle
+
 from tqdm import tqdm
 
 import numpy as np
@@ -34,8 +35,6 @@ voice_ids = list(range(NUM_VOICES))  # soprano, alto, tenor, bass
 SLUR_SYMBOL = '__'
 START_SYMBOL = 'START'
 END_SYMBOL = 'END'
-
-
 
 
 def standard_name(note_or_rest):
@@ -178,7 +177,6 @@ def to_fermata(time, timesteps=None):
     return fermatas_left, central_fermata, fermatas_right
 
 
-
 def chorale_to_inputs(chorale, num_voices, index2notes, note2indexes):
     """
     :param chorale: music21 chorale
@@ -303,7 +301,6 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, meta
         except (AttributeError, IndexError):
             pass
 
-    # todo save metadatas objects in pickle file
     dataset = (X, X_metadatas, num_voices, index2notes, note2indexes, metadatas)
     pickle.dump(dataset, open(dataset_name, 'wb'), pickle.HIGHEST_PROTOCOL)
     print(str(len(X)) + ' files written in ' + dataset_name)
@@ -383,7 +380,7 @@ def all_metadatas(chorale_metadatas, time_index=None, timesteps=None, metadatas=
 
 def generator_from_raw_dataset(batch_size, timesteps, voice_index,
                                phase='train', percentage_train=0.8, pickled_dataset=BACH_DATASET,
-                               transpose=True, metadatas=None):
+                               transpose=True):
     """
      Returns a generator of
             (left_features,
@@ -397,7 +394,7 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
             where fermatas = (fermatas_left, central_fermatas, fermatas_right)
     """
 
-    X, X_metadatas, num_voices, index2notes, note2indexes = pickle.load(open(pickled_dataset, 'rb'))
+    X, X_metadatas, num_voices, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
     num_pitches = list(map(lambda x: len(x), index2notes))
 
     # Set chorale_indices
@@ -409,9 +406,6 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
     left_features = []
     right_features = []
     central_features = []
-    beats = []
-    beats_right = []
-    beats_left = []
     left_metas = []
     right_metas = []
     metas = []
@@ -448,17 +442,12 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
                                                     time_index=time_index, timesteps=timesteps)
 
         (left_feature, central_feature, right_feature,
-         (beat_left, beat, beat_right),
          label
          ) = features
 
         left_features.append(left_feature)
         right_features.append(right_feature)
         central_features.append(central_feature)
-
-        beats.append(beat)
-        beats_right.append(beat_right)
-        beats_left.append(beat_left)
 
         left_metas.append(left_meta)
         right_metas.append(right_meta)
@@ -469,18 +458,16 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
 
         # if there is a full batch
         if batch == batch_size:
-            next_element = (np.array(left_features, dtype=np.float32),
-                            np.array(central_features, dtype=np.float32),
-                            np.array(right_features, dtype=np.float32),
-                            (np.array(beats_left, dtype=np.float32),
-                             np.array(beats, dtype=np.float32),
-                             np.array(beats_right, dtype=np.float32)
-                             ),
-                            (np.array(left_metas, dtype=np.float32),
-                             np.array(metas, dtype=np.float32),
-                             np.array(right_metas, dtype=np.float32)
-                             ),
-                            np.array(labels, dtype=np.float32))
+            next_element = (
+                (np.array(left_features, dtype=np.float32),
+                 np.array(central_features, dtype=np.float32),
+                 np.array(right_features, dtype=np.float32)
+                 ),
+                (np.array(left_metas, dtype=np.float32),
+                 np.array(metas, dtype=np.float32),
+                 np.array(right_metas, dtype=np.float32)
+                 ),
+                np.array(labels, dtype=np.float32))
 
             yield next_element
 
@@ -489,9 +476,6 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
             left_features = []
             central_features = []
             right_features = []
-            beats = []
-            beats_left = []
-            beats_right = []
             left_metas = []
             right_metas = []
             metas = []
