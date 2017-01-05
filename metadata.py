@@ -15,6 +15,9 @@ class Metadata:
         # trick with the 0 value
         raise NotImplementedError
 
+    def get_value(self, index):
+        raise NotImplementedError
+
     def evaluate(self, chorale):
         """
         takes a music21 chorale as input
@@ -33,6 +36,12 @@ class TickMetadatas(Metadata):
         self.is_global = False
         self.num_values = num_subdivisions
 
+    def get_index(self, value):
+        return value
+
+    def get_value(self, index):
+        return index
+
     def evaluate(self, chorale):
         # suppose all pieces start on a beat
         length = int(chorale.duration.quarterLength * SUBDIVISION)
@@ -48,6 +57,22 @@ class KeyMetadatas(Metadata):
         self.is_global = False
         self.num_max_sharps = 7
         self.num_values = 16
+
+    def get_index(self, value):
+        """
+
+        :param value: number of sharps (between -7 and +7)
+        :return: index in the representation
+        """
+        return value + self.num_max_sharps + 1
+
+    def get_value(self, index):
+        """
+
+        :param index:  index (between 0 and self.num_values); 0 is unused (no constraint)
+        :return: true number of sharps (between -7 and 7)
+        """
+        return index - 1 - self.num_max_sharps
 
     # todo check if this method is correct for windowSize > 1
     def evaluate(self, chorale):
@@ -78,6 +103,9 @@ class FermataMetadatas(Metadata):
     def get_index(self, value):
         # values are 1 and 0
         return value
+
+    def get_value(self, index):
+        return index
 
     def evaluate(self, chorale):
         part = chorale.parts[0]

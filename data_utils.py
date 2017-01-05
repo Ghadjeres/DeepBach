@@ -323,7 +323,6 @@ def _min_max_midi_pitch(note_strings):
 
 
 def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, metadatas=None):
-    # todo transposition
     X = []
     X_metadatas = []
     index2notes, note2indexes = create_index_dicts(chorale_list, num_voices=num_voices)
@@ -375,19 +374,6 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, meta
     print(str(len(X)) + ' files written in ' + dataset_name)
 
 
-#
-# def p_to_onehot(p, min_pitch, max_pitch):
-#     """
-#     pitch to one hot
-#     :param p:
-#     :param min_pitch:
-#     :param max_pitch: included !
-#     :return: np.array of shape (max_pitch - min_pitch + 1)
-#     """
-#     return np.array(p == np.arange(min_pitch, max_pitch + 1),
-#                     dtype=np.float32)
-
-
 def to_onehot(index, num_indexes):
     return np.array(index == np.arange(0, num_indexes),
                     dtype=np.float32)
@@ -432,13 +418,13 @@ def all_features(chorale, voice_index, time_index, timesteps, num_pitches, num_v
                                            num_pitches[mask])
 
     # put timesteps=None to only have the current beat
-    beat = to_beat(time_index, timesteps=timesteps)
+    # beat is now considered as a metadata
+    # beat = to_beat(time_index, timesteps=timesteps)
     label = to_onehot(chorale[time_index, voice_index], num_indexes=num_pitches[voice_index])
 
     return (np.array(left_feature),
             np.array(central_feature),
             np.array(right_feature),
-            beat,
             np.array(label)
             )
 
