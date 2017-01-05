@@ -178,71 +178,6 @@ def to_fermata(time, timesteps=None):
     return fermatas_left, central_fermata, fermatas_right
 
 
-def inputs_to_feature(inputs, voice_id, initial_beat=0):
-    """
-    Arguments: inputs  list of input
-    Returns: features for voice voice_id
-    features : previous_pitch * simultaneous_above_pitch * articulation * beat
-    :param voice_id: so that a voice depends only on the preceding voices
-    """
-    beat_length = len(to_beat(0))
-    feature = np.zeros((inputs[voice_id].shape[0], inputs[voice_id].shape[1] + beat_length))
-    for k, pitch_and_articulation in enumerate(inputs[voice_id]):
-        feature[k, :] = np.concatenate((pitch_and_articulation, to_beat(k + initial_beat)))
-    return feature
-
-
-def inputs_to_feature_with_fermata(inputs, voice_index, initial_beat=0):
-    """
-    Arguments: inputs  list of input containing fermatas
-    Returns: features for voice voice_index in inputs
-    features : previous_pitch * articulation * beat
-    """
-    beat_length = len(to_beat(0))
-    feature = np.zeros((inputs[voice_index].shape[0],
-                        inputs[voice_index].shape[1] - 1 + BITS_FERMATA + beat_length))
-    for k, pitch_and_articulation_and_fermata in enumerate(inputs[voice_index]):
-        feature[k, :] = np.concatenate((pitch_and_articulation_and_fermata[:2],
-                                        next_fermata_within(inputs, voice_index, k),
-                                        to_beat(k + initial_beat)))
-    return feature
-
-
-def next_fermata_within(inputs, voice_id, index, range_fermata=RANGE_FERMATA):
-    """
-    :param range_fermata:
-    :param inputs:
-    :param voice_id:
-    :param index:
-    :return:
-    """
-    # if fermata
-    num = 0
-    if inputs[voice_id][index][2]:
-        num = 0
-    else:
-        for k in range(index, len(inputs[voice_id])):
-            if inputs[voice_id][k][2]:
-                num = ((k - k % SUBDIVISION) - (index - index % SUBDIVISION)) // SUBDIVISION
-                break
-    if num <= range_fermata:
-        return np.array([0, 1], dtype=np.int32)
-    else:
-        return np.array([1, 0], dtype=np.int32)
-
-
-def next_fermata_in(inputs, voice_id, index):
-    # if fermata
-    num = 0
-    if inputs[voice_id][index][2]:
-        num = 0
-    else:
-        for k in range(index, len(inputs[voice_id])):
-            if inputs[voice_id][k][2]:
-                num = ((k - k % SUBDIVISION) - (index - index % SUBDIVISION)) / SUBDIVISION
-                break
-    return np.array(list(map(lambda x: x == num, range(BITS_FERMATA))), dtype=np.int32)
-
 
 def chorale_to_inputs(chorale, num_voices, index2notes, note2indexes):
     """
@@ -369,7 +304,7 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, meta
             pass
 
     # todo save metadatas objects in pickle file
-    dataset = (X, X_metadatas, num_voices, index2notes, note2indexes)
+    dataset = (X, X_metadatas, num_voices, index2notes, note2indexes, metadatas)
     pickle.dump(dataset, open(dataset_name, 'wb'), pickle.HIGHEST_PROTOCOL)
     print(str(len(X)) + ' files written in ' + dataset_name)
 
@@ -710,6 +645,7 @@ def initialization(dataset_path=None, metadatas=None):
         chorale_list = filter_file_list(corpus.getBachChorales(fileExtensions='xml'))
         pickled_dataset = BACH_DATASET
 
+    # remove wrong chorales:
     min_pitches, max_pitches = compute_min_max_pitches(chorale_list, voices=voice_ids)
 
     make_dataset(chorale_list, pickled_dataset,
