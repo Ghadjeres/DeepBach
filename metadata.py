@@ -51,6 +51,45 @@ class TickMetadatas(Metadata):
         )))
 
 
+class ModeMetadatas(Metadata):
+    def __init__(self):
+        self.is_global = False
+        self.num_values = 3  # major, minor or other
+
+    def get_index(self, value):
+        if value == 'major':
+            return 1
+        if value == 'minor':
+            return 2
+        return 0
+
+    def get_value(self, index):
+        if index == 1:
+            return 'major'
+        if index == 2:
+            return 'minor'
+        return 'other'
+
+    def evaluate(self, chorale):
+        # init key analyzer
+        ka = analysis.floatingKey.KeyAnalyzer(chorale)
+        res = ka.run()
+
+        measure_offset_map = chorale.parts[0].measureOffsetMap()
+        length = int(chorale.duration.quarterLength * SUBDIVISION)  # in 16th notes
+
+        modes = np.zeros((length,))
+
+        measure_index = -1
+        for time_index in range(length):
+            beat_index = time_index / SUBDIVISION
+            if beat_index in measure_offset_map:
+                measure_index += 1
+                modes[time_index] = self.get_index(res[measure_index].mode)
+
+        return np.array(modes, dtype=np.int32)
+
+
 class KeyMetadatas(Metadata):
     def __init__(self, window_size=4):
         self.window_size = window_size
