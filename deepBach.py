@@ -17,30 +17,29 @@ from keras.models import model_from_json, model_from_yaml
 from music21 import midi, converter
 from tqdm import tqdm
 
-from DeepBach.data_utils import BEAT_SIZE, \
-    BITS_FERMATA, \
+from data_utils import BEAT_SIZE, \
     generator_from_raw_dataset, BACH_DATASET, all_features, \
     indexed_chorale_to_score, \
     initialization, START_SYMBOL, END_SYMBOL, part_to_inputs, \
     NUM_VOICES, all_metadatas
 from metadata import *
 
-from fast_weights.fw.fast_weights_layer import FastWeights
-
 
 def generation(model_base_name, models, timesteps, melody=None, chorale_metas=None,
                initial_seq=None, temperature=1.0, parallel=False, batch_size_per_voice=8, num_iterations=None,
                sequence_length=160,
-               output_file=None, pickled_dataset=BACH_DATASET, metadatas=None):
+               output_file=None, pickled_dataset=BACH_DATASET):
     # Test by generating a sequence
 
+    # todo -p parameter
+    parallel = True
     if parallel:
         seq = parallel_gibbs(models=models, model_base_name=model_base_name,
                              melody=melody, chorale_metas=chorale_metas, timesteps=timesteps,
                              num_iterations=num_iterations, sequence_length=sequence_length,
                              temperature=temperature,
                              initial_seq=initial_seq, batch_size_per_voice=batch_size_per_voice,
-                             parallel_updates=True, pickled_dataset=pickled_dataset, metadatas=metadatas)
+                             parallel_updates=True, pickled_dataset=pickled_dataset)
 
     else:
         # todo refactor
@@ -154,29 +153,27 @@ def skip(num_features_lr, num_features_c, num_features_meta, num_pitches, num_un
     left_features = Input(shape=(timesteps, num_features_lr), name='left_features')
     right_features = Input(shape=(timesteps, num_features_lr), name='right_features')
     central_features = Input(shape=(num_features_c,), name='central_features')
-    beat = Input(shape=(BEAT_SIZE,), name='beat')
-    beats_right = Input(shape=(timesteps, BEAT_SIZE), name='beats_right')
-    beats_left = Input(shape=(timesteps, BEAT_SIZE), name='beats_left')
+
     left_metas = Input(shape=(timesteps, num_features_meta), name='left_metas')
     right_metas = Input(shape=(timesteps, num_features_meta), name='right_metas')
     central_metas = Input(shape=(num_features_meta,), name='central_metas')
 
     # embedding layer for left and right
-    embedding_left = Dense(input_dim=num_features_lr + BEAT_SIZE + num_features_meta,
+    embedding_left = Dense(input_dim=num_features_lr + num_features_meta,
                            output_dim=num_dense, name='embedding_left')
     embedding_right = Dense(input_dim=num_features_lr + BEAT_SIZE + num_features_meta,
                             output_dim=num_dense, name='embedding_right')
 
     predictions_left = TimeDistributed(embedding_left)(merge((left_features,
-                                                              beats_left,
+
                                                               left_metas),
                                                              mode='concat'))
     predictions_right = TimeDistributed(embedding_right)(merge((right_features,
-                                                                beats_right,
+
                                                                 right_metas),
                                                                mode='concat'))
 
-    predictions_center = merge((central_features, beat,
+    predictions_center = merge((central_features,
                                 central_metas), mode='concat')
 
     predictions_center = Dense(num_dense, activation='relu')(predictions_center)
@@ -193,9 +190,9 @@ def skip(num_features_lr, num_features_c, num_features_meta, num_pitches, num_un
             return_sequences = False
 
         if k > 0:
-            # todo it merges all inputs, not only the previous one
-            predictions_left_tmp = merge([Activation('relu')(predictions_left), predictions_left_old], mode='concat')
-            predictions_right_tmp = merge([Activation('relu')(predictions_right), predictions_right_old], mode='concat')
+            # todo difference between concat and sum
+            predictions_left_tmp = merge([Activation('relu')(predictions_left), predictions_left_old], mode='sum')
+            predictions_right_tmp = merge([Activation('relu')(predictions_right), predictions_right_old], mode='sum')
         else:
             predictions_left_tmp = predictions_left
             predictions_right_tmp = predictions_right
@@ -215,6 +212,10 @@ def skip(num_features_lr, num_features_c, num_features_meta, num_pitches, num_un
                                  name='lstm_right_' + str(stack_index)
                                  )(predictions_right)
 
+        # todo dropout here?
+        predictions_left = Dropout(0.5)(predictions_left)
+        predictions_right = Dropout(0.5)(predictions_right)
+
     # retain only last input for skip connections
     predictions_left_old = Lambda(lambda t: t[:, -1, :],
                                   output_shape=lambda input_shape: (input_shape[0], input_shape[-1])
@@ -233,7 +234,7 @@ def skip(num_features_lr, num_features_c, num_features_meta, num_pitches, num_un
                              name='pitch_prediction')(predictions)
 
     model = Model(input=[left_features, central_features, right_features,
-                         beat, beats_left, beats_right,
+
                          left_metas, right_metas, central_metas],
                   output=pitch_prediction)
 
@@ -364,12 +365,12 @@ def parallel_gibbs(models=None, melody=None, chorale_metas=None, sequence_length
                    timesteps=16,
                    model_base_name='models/raw_dataset/tmp/',
                    temperature=1., initial_seq=None, batch_size_per_voice=16, parallel_updates=True,
-                   pickled_dataset=BACH_DATASET, metadatas=None):
+                   pickled_dataset=BACH_DATASET):
     """
     samples from models in model_base_name
     """
 
-    X, X_metadatas, num_voices, index2notes, note2indexes = pickle.load(open(pickled_dataset, 'rb'))
+    X, X_metadatas, num_voices, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
     num_pitches = list(map(len, index2notes))
 
     # load models if not
@@ -442,7 +443,6 @@ def parallel_gibbs(models=None, melody=None, chorale_metas=None, sequence_length
                 (left_feature,
                  central_feature,
                  right_feature,
-                 (beats_left, beat, beats_right),
                  label) = all_features(seq, voice_index, time_index, timesteps, num_pitches, num_voices)
 
                 left_metas, central_metas, right_metas = all_metadatas(chorale_metadatas=extended_chorale_metas,
@@ -452,9 +452,6 @@ def parallel_gibbs(models=None, melody=None, chorale_metas=None, sequence_length
                 input_features = {'left_features': left_feature[:, :],
                                   'central_features': central_feature[:],
                                   'right_features': right_feature[:, :],
-                                  'beat': beat[:],
-                                  'beats_left': beats_left[:, :],
-                                  'beats_right': beats_right[:, :],
                                   'left_metas': left_metas,
                                   'central_metas': central_metas,
                                   'right_metas': right_metas}
@@ -509,7 +506,7 @@ def load_model(model_name, yaml=True):
     """
     if yaml:
         ext = '.yaml'
-        model = model_from_yaml(open(model_name + ext).read(), custom_objects={'FastWeights': FastWeights})
+        model = model_from_yaml(open(model_name + ext).read())
     else:
         ext = '.json'
         model = model_from_json(open(model_name + ext).read())
@@ -791,6 +788,7 @@ def main():
     # chorale_metas = []
     # chorale_metas.append(np.zeros((len(melody), )))
     # chorale_metas.append(np.full((len(melody),), 8))
+
     seq = generation(model_base_name=model_name, models=models,
                      timesteps=timesteps,
                      melody=melody, initial_seq=None, temperature=temperature,
@@ -798,8 +796,7 @@ def main():
                      num_iterations=num_iterations,
                      sequence_length=sequence_length,
                      output_file=output_file,
-                     pickled_dataset=pickled_dataset,
-                     metadatas=metadatas)
+                     pickled_dataset=pickled_dataset)
 
 
 if __name__ == '__main__':

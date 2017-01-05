@@ -551,7 +551,7 @@ def seqs_to_stream(seqs):
 
 
 def indexed_chorale_to_score(seq, pickled_dataset):
-    _, _, _, index2notes, note2indexes = pickle.load(open(pickled_dataset, 'rb'))
+    _, _, _, index2notes, note2indexes, _ = pickle.load(open(pickled_dataset, 'rb'))
     num_pitches = list(map(len, index2notes))
     slur_indexes = list(map(lambda d: d[SLUR_SYMBOL], note2indexes))
 
