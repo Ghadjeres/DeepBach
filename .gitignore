@@ -87,3 +87,8 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+# local files
+/models_zoo.py
+/stats/
+/datasets/Oll.xml
