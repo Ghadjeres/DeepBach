@@ -56,14 +56,16 @@ MuseScore {
             onClicked: {
                 var cursor = curScore.newCursor();
                 cursor.rewind(1);
+                var startStaff = cursor.staffIdx;
                 var startTick = cursor.tick;
                 cursor.rewind(2);
+                var endStaff = cursor.staffIdx;
                 var endTick = cursor.tick;
                 var extension = 'xml'
                 // var targetFile = tempPath() + "/my_file." + extension
                 myFile.remove();
                 var res = writeScore(mainMuseScoreObj.curScore, myFile.source, extension)
-                var content = "start_tick=" + startTick + "&end_tick=" + endTick + "&xml_string=" + encodeURIComponent(myFile.read())
+                var content = "start_staff=" + startStaff + "&end_staff=" + endStaff + "start_tick=" + startTick + "&end_tick=" + endTick + "&xml_string=" + encodeURIComponent(myFile.read())
                 var request = new XMLHttpRequest()
                 request.onreadystatechange = function() {
                     statusLabel.text = statusLabel.text + '.'
