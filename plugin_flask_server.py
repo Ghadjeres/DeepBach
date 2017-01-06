@@ -2,25 +2,22 @@ import os
 import pickle
 import tempfile
 import sys
+from glob import glob
 
 from data_utils import START_SYMBOL, END_SYMBOL, all_features, \
-    all_metadatas, indexed_chorale_to_score, chorale_to_inputs
+    all_metadatas, indexed_chorale_to_score, chorale_to_inputs, BACH_DATASET
 from deepBach import load_models
-from flask import Flask, request, make_response
+from flask import Flask, request, make_response, jsonify
 
 from music21 import musicxml, converter
 from tqdm import tqdm
 
 import numpy as np
 
-BACH_DATASET = 'dataset/bach_dataset.pickle'
 UPLOAD_FOLDER = '/tmp'
 ALLOWED_EXTENSIONS = {'xml', 'mxl', 'mid', 'midi'}
 
 app = Flask(__name__)
-
-
-# app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 
 def allowed_file(filename):
@@ -158,7 +155,7 @@ response_headers = {"Content-Type": "text/html",
                     "charset": "utf-8"
                     }
 
-# datasets
+# datasets only Bach for the moment
 pickled_dataset = BACH_DATASET
 if not os.path.exists(pickled_dataset):
     print('Warning: no dataset')
@@ -168,21 +165,21 @@ if not os.path.exists(pickled_dataset):
 X, X_metadatas, num_voices, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
 
 num_pitches = list(map(len, index2notes))
-batch_size = 128
 
-ext = ''
-model_name = 'deepbach' + ext
+# get model names present in folder models/
+models_list = glob('models/*.yaml')
+models_list = list(set(map(lambda name: '_'.join(name.split('_')[:-1]).split('/')[-1], models_list)))
 
-model_name = 'skip_sum'
-
+model_name = 'skip_tfk'
 assert os.path.exists('models/' + model_name + '_' + str(num_voices - 1) + '.yaml')
 
 # load models
 models = load_models(model_name, num_voices=num_voices)
-temperature = 1.
 
+temperature = 1.
 timesteps = int(models[0].input[0]._keras_shape[1])
 
+# todo set metadatas from score
 chorale_metas = X_metadatas[199]
 
 
@@ -194,7 +191,6 @@ chorale_metas = X_metadatas[199]
 @app.route('/compose', methods=['POST'])
 def compose():
     # --- Parse request---
-
     with tempfile.NamedTemporaryFile(mode='w', suffix='.xml') as file:
         print(file.name)
         # file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
@@ -273,14 +269,17 @@ def test_generation():
 
 @app.route('/models', methods=['GET'])
 def models():
-    pass
+    # for test
+    return jsonify(models_list)
 
 
-@app.route('/current_model', methods=['UPDATE'])
+@app.route('/current_model', methods=['POST', 'PUT'])
 def current_model_update():
-    pass
+    model_name = request.form['model_name']
+    models = load_models(model_base_name=model_name, num_voices=num_voices)
+    return jsonify('Model ' + model_name + ' loaded')
 
 
 @app.route('/current_model', methods=['GET'])
 def current_model_get():
-    pass
+    return model_name
