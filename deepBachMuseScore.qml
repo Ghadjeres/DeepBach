@@ -15,6 +15,16 @@ MuseScore {
         source: tempPath() + "/" + mainMuseScoreObj.curScore.title + "_recomposed_by_deepBach.xml"
         onError: console.log(msg)
     }
+    onRun: {
+        var requestModels = new XMLHttpRequest()
+        requestModels.open("GET", serverAddressInput.text + 'models', true)
+        requestModels.onreadystatechange = function() {
+            if (requestModels.readyState == XMLHttpRequest.DONE) {
+                modelSelector.model = JSON.parse(requestModels.responseText)
+            }
+        }
+        requestModels.send()
+    }
     Rectangle {
         id: wrapperPanel
         color: "white"
@@ -38,19 +48,43 @@ MuseScore {
             anchors.top: title.top
             anchors.topMargin: 35
         }
-        TextInput {
+        TextField {
             id: serverAddressInput
             text: "http://localhost:5000/"
-            cursorVisible: true
             anchors.left: wrapperPanel.left
             anchors.top: serverInputLabel.top
             anchors.topMargin: 15
+            width: 200
+            height: 20
+            onEditingFinished: {
+                  mainMuseScoreObj.onRun();
+            } 
+        }
+        ComboBox {
+            id: modelSelector
+            anchors.top: serverAddressInput.bottom 
+            anchors.topMargin: 15
+            model: []
+            width: 200
+            onCurrentIndexChanged: {
+                var requestLoadModel = new XMLHttpRequest()
+                requestLoadModel.open("POST", serverAddressInput.text + 'current_model', true)
+                var content = "model_name=" + modelSelector.model[modelSelector.currentIndex]
+                requestLoadModel.onreadystatechange = function() {
+                    if (requestLoadModel.readyState == XMLHttpRequest.DONE) {
+                        statusLabel.text = requestLoadModel.responseText
+                    }
+                }
+                requestLoadModel.setRequestHeader("Content-Type", "application/x-www-form-urlencoded")
+                statusLabel.text = 'Loading model ' + modelSelector.model[modelSelector.currentIndex]
+                requestLoadModel.send(content)
+            }
         }
         Button {
             id : buttonOpenFile
             text: qsTr("Compose")
             anchors.left: wrapperPanel.left
-            anchors.top: serverAddressInput.top
+            anchors.top: modelSelector.top
             anchors.topMargin: 30
             anchors.bottomMargin: 10
             onClicked: {
