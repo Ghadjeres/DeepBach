@@ -28,11 +28,17 @@ def allowed_file(filename):
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-def parallel_gibbs_server(models=None, start_tick=None, end_tick=None,
-                          chorale_metas=None, num_iterations=1000,
-                          timesteps=16, num_voices=None,
-                          temperature=1., input_chorale=None,
-                          batch_size_per_voice=16, parallel_updates=True,
+def parallel_gibbs_server(models=None,
+                          start_tick=None, end_tick=None,
+                          start_voice_index=None, end_voice_index=None,
+                          chorale_metas=None,
+                          num_iterations=1000,
+                          timesteps=16,
+                          num_voices=None,
+                          temperature=1.,
+                          input_chorale=None,
+                          batch_size_per_voice=16,
+                          parallel_updates=True,
                           metadatas=None):
     """
     input_chorale is time major
@@ -50,9 +56,11 @@ def parallel_gibbs_server(models=None, start_tick=None, end_tick=None,
     for expert_index in range(num_voices):
         # Add start and end symbol
         seq[:timesteps, expert_index] = [note2indexes[expert_index][START_SYMBOL]] * timesteps
+        seq[-timesteps:, expert_index] = [note2indexes[expert_index][END_SYMBOL]] * timesteps
+    for expert_index in range(start_voice_index, end_voice_index + 1):
+        # Randomize selected zone
         seq[timesteps + start_tick: timesteps + end_tick, expert_index] = np.random.randint(num_pitches[expert_index],
                                                                                             size=end_tick - start_tick)
-        seq[-timesteps:, expert_index] = [note2indexes[expert_index][END_SYMBOL]] * timesteps
 
     if chorale_metas is not None:
         # chorale_metas is a list
@@ -68,7 +76,7 @@ def parallel_gibbs_server(models=None, start_tick=None, end_tick=None,
 
     min_temperature = temperature
     temperature = 1.3
-    discount_factor = np.power(1./ temperature, 3 / 2 /  num_iterations)
+    discount_factor = np.power(1. / temperature, 3 / 2 / num_iterations)
     # Main loop
     for iteration in tqdm(range(num_iterations)):
 
@@ -77,8 +85,7 @@ def parallel_gibbs_server(models=None, start_tick=None, end_tick=None,
 
         time_indexes = {}
         probas = {}
-        # todo voice selection
-        for voice_index in range(0, num_voices):
+        for voice_index in range(start_voice_index, end_voice_index + 1):
             batch_input_features = []
 
             time_indexes[voice_index] = []
@@ -130,8 +137,7 @@ def parallel_gibbs_server(models=None, start_tick=None, end_tick=None,
 
         if parallel_updates:
             # update
-            # todo voice selection
-            for voice_index in range(0, num_voices):
+            for voice_index in range(start_voice_index, end_voice_index):
                 for batch_index in range(batch_size_per_voice):
                     probas_pitch = probas[voice_index][batch_index]
 
@@ -185,71 +191,73 @@ chorale_metas = X_metadatas[199]
 # chorale_metas.append(np.full((len(melody),), 8))
 
 
-@app.route('/', methods=['POST', 'GET'])
+@app.route('/compose', methods=['POST'])
 def compose():
-    if request.method == 'POST':
-        # --- Parse request---
+    # --- Parse request---
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.xml') as file:
-            print(file.name)
-            # file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            xml_string = request.form['xml_string']
-            file.write(xml_string)
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.xml') as file:
+        print(file.name)
+        # file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        xml_string = request.form['xml_string']
+        file.write(xml_string)
 
-            # load chorale with music21
-            input_chorale = converter.parse(file.name)
-            input_chorale = chorale_to_inputs(input_chorale,
-                                              num_voices=num_voices,
-                                              index2notes=index2notes,
-                                              note2indexes=note2indexes
-                                              )
-            # make chorale time major
-            input_chorale = np.transpose(input_chorale, axes=(1, 0))
+        # load chorale with music21
+        input_chorale = converter.parse(file.name)
+        input_chorale = chorale_to_inputs(input_chorale,
+                                          num_voices=num_voices,
+                                          index2notes=index2notes,
+                                          note2indexes=note2indexes
+                                          )
+        # make chorale time major
+        input_chorale = np.transpose(input_chorale, axes=(1, 0))
 
-            NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE = 120
-            start_tick_selection = float(request.form['start_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE
-            end_tick_selection = float(request.form['end_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE
+        NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE = 120
+        start_tick_selection = float(request.form['start_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE
+        end_tick_selection = float(request.form['end_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE
+        start_voice_index = int(request.form['start_staff'])
+        end_voice_index = int(request.form['end_staff'])
 
-            # if no selection
-            if start_tick_selection == 0 and end_tick_selection == 0:
-                chorale_length = input_chorale.shape[0]
-                end_tick_selection = chorale_length
+        # if no selection
+        if start_tick_selection == 0 and end_tick_selection == 0:
+            chorale_length = input_chorale.shape[0]
+            end_tick_selection = chorale_length
 
-            diff = end_tick_selection - start_tick_selection + 1
-            num_iterations = 100 * diff
+        diff = end_tick_selection - start_tick_selection + 1
+        num_iterations = 100 * diff
 
-            if diff < 16:
-                batch_size_per_voice = 4
-            else:
-                batch_size_per_voice = 16
+        if diff < 16:
+            batch_size_per_voice = 4
+        else:
+            batch_size_per_voice = 16
 
-            num_iterations = max(int(num_iterations // batch_size_per_voice // num_voices), 5)
+        num_iterations = max(int(num_iterations // batch_size_per_voice // num_voices), 5)
 
+        # --- Generate---
+        output_chorale = parallel_gibbs_server(models=models,
+                                               start_tick=start_tick_selection,
+                                               end_tick=end_tick_selection,
+                                               start_voice_index=start_voice_index,
+                                               end_voice_index=end_voice_index,
+                                               input_chorale=input_chorale,
+                                               chorale_metas=chorale_metas,
+                                               num_iterations=num_iterations,
+                                               num_voices=num_voices,
+                                               timesteps=timesteps,
+                                               temperature=temperature,
+                                               batch_size_per_voice=batch_size_per_voice,
+                                               parallel_updates=True,
+                                               metadatas=metadatas)
 
-            # --- Generate---
-            output_chorale = parallel_gibbs_server(models=models,
-                                                   start_tick=start_tick_selection,
-                                                   end_tick=end_tick_selection,
-                                                   input_chorale=input_chorale,
-                                                   chorale_metas=chorale_metas,
-                                                   num_iterations=num_iterations,
-                                                   num_voices=num_voices,
-                                                   timesteps=timesteps,
-                                                   temperature=temperature,
-                                                   batch_size_per_voice=batch_size_per_voice,
-                                                   parallel_updates=True,
-                                                   metadatas=metadatas)
+        # convert back to music21
+        output_chorale = indexed_chorale_to_score(np.transpose(output_chorale, axes=(1, 0)),
+                                                  pickled_dataset=pickled_dataset
+                                                  )
 
-            # convert back to music21
-            output_chorale = indexed_chorale_to_score(np.transpose(output_chorale, axes=(1, 0)),
-                                                      pickled_dataset=pickled_dataset
-                                                      )
+        # convert chorale to xml
+        goe = musicxml.m21ToXml.GeneralObjectExporter(output_chorale)
+        xml_chorale_string = goe.parse()
 
-            # convert chorale to xml
-            goe = musicxml.m21ToXml.GeneralObjectExporter(output_chorale)
-            xml_chorale_string = goe.parse()
-
-            response = make_response((xml_chorale_string, response_headers))
+        response = make_response((xml_chorale_string, response_headers))
     return response
 
 
@@ -261,3 +269,18 @@ def test_generation():
         print(request)
 
     return response
+
+
+@app.route('/models', methods=['GET'])
+def models():
+    pass
+
+
+@app.route('/current_model', methods=['UPDATE'])
+def current_model_update():
+    pass
+
+
+@app.route('/current_model', methods=['GET'])
+def current_model_get():
+    pass
