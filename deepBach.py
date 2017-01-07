@@ -719,7 +719,7 @@ def create_models(model_name=None, create_new=False, num_dense=200, num_units_ls
     num_pitches = list(map(len, index2notes))
     for voice_index in range(num_voices):
         # We only need one example for features dimensions
-        gen = generator_from_raw_dataset(batch_size=batch_size, timesteps=timesteps, metadatas=metadatas,
+        gen = generator_from_raw_dataset(batch_size=1, timesteps=timesteps, metadatas=metadatas,
                                          voice_index=voice_index, pickled_dataset=pickled_dataset)
 
         (left_features,
