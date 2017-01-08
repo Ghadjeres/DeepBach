@@ -6,6 +6,7 @@ Created on 7 mars 2016
 @author: Gaetan Hadjeres
 """
 import pickle
+
 from tqdm import tqdm
 
 import numpy as np
@@ -34,94 +35,6 @@ voice_ids = list(range(NUM_VOICES))  # soprano, alto, tenor, bass
 SLUR_SYMBOL = '__'
 START_SYMBOL = 'START'
 END_SYMBOL = 'END'
-
-
-class Metadata:
-    def __init__(self):
-        raise NotImplementedError
-
-    def get_index(self, value):
-        # trick with the 0 value
-        raise NotImplementedError
-
-    def evaluate(self, chorale):
-        """
-        takes a music21 chorale as input
-        """
-        raise NotImplementedError
-
-
-# todo BeatMetadata class
-# todo add strong/weak beat metadata
-
-class KeyMetadatas(Metadata):
-    def __init__(self, windowSize=4):
-        self.windowSize = windowSize
-        self.is_global = False
-        self.num_max_sharps = 7
-        self.num_values = 16
-
-    # todo check if this method is correct for windowSize > 1
-    def evaluate(self, chorale):
-        # init key analyzer
-        ka = analysis.floatingKey.KeyAnalyzer(chorale)
-        ka.windowSize = self.windowSize
-        res = ka.run()
-
-        measure_offset_map = chorale.parts[0].measureOffsetMap()
-        length = int(chorale.duration.quarterLength * SUBDIVISION)  # in 16th notes
-
-        key_signatures = np.zeros((length,))
-
-        measure_index = -1
-        for time_index in range(length):
-            beat_index = time_index / SUBDIVISION
-            if beat_index in measure_offset_map:
-                measure_index += 1
-            key_signatures[time_index] = res[measure_index].sharps + self.num_max_sharps + 1
-        return np.array(key_signatures, dtype=np.int32)
-
-
-class FermataMetadatas(Metadata):
-    def __init__(self, ):
-        self.is_global = False
-        self.num_values = 2
-
-    def get_index(self, value):
-        # values are 1 and 0
-        return value
-
-    def evaluate(self, chorale):
-        part = chorale.parts[0]
-        length = int(part.duration.quarterLength * SUBDIVISION)  # in 16th notes
-        list_notes = part.flat.notes
-        num_notes = len(list_notes)
-        j = 0
-        i = 0
-        fermatas = np.zeros((length,))
-        is_articulated = True
-        fermata = False
-        while i < length:
-            if j < num_notes - 1:
-                if list_notes[j + 1].offset > i / SUBDIVISION:
-
-                    if len(list_notes[j].expressions) == 1:
-                        fermata = True
-                    else:
-                        fermata = False
-                    fermatas[i] = fermata
-                    i += 1
-                else:
-                    j += 1
-            else:
-                if len(list_notes[j].expressions) == 1:
-                    fermata = True
-                else:
-                    fermata = False
-
-                fermatas[i] = fermata
-                i += 1
-        return np.array(fermatas, dtype=np.int32)
 
 
 def standard_name(note_or_rest):
@@ -264,72 +177,6 @@ def to_fermata(time, timesteps=None):
     return fermatas_left, central_fermata, fermatas_right
 
 
-def inputs_to_feature(inputs, voice_id, initial_beat=0):
-    """
-    Arguments: inputs  list of input
-    Returns: features for voice voice_id
-    features : previous_pitch * simultaneous_above_pitch * articulation * beat
-    :param voice_id: so that a voice depends only on the preceding voices
-    """
-    beat_length = len(to_beat(0))
-    feature = np.zeros((inputs[voice_id].shape[0], inputs[voice_id].shape[1] + beat_length))
-    for k, pitch_and_articulation in enumerate(inputs[voice_id]):
-        feature[k, :] = np.concatenate((pitch_and_articulation, to_beat(k + initial_beat)))
-    return feature
-
-
-def inputs_to_feature_with_fermata(inputs, voice_index, initial_beat=0):
-    """
-    Arguments: inputs  list of input containing fermatas
-    Returns: features for voice voice_index in inputs
-    features : previous_pitch * articulation * beat
-    """
-    beat_length = len(to_beat(0))
-    feature = np.zeros((inputs[voice_index].shape[0],
-                        inputs[voice_index].shape[1] - 1 + BITS_FERMATA + beat_length))
-    for k, pitch_and_articulation_and_fermata in enumerate(inputs[voice_index]):
-        feature[k, :] = np.concatenate((pitch_and_articulation_and_fermata[:2],
-                                        next_fermata_within(inputs, voice_index, k),
-                                        to_beat(k + initial_beat)))
-    return feature
-
-
-def next_fermata_within(inputs, voice_id, index, range_fermata=RANGE_FERMATA):
-    """
-    :param range_fermata:
-    :param inputs:
-    :param voice_id:
-    :param index:
-    :return:
-    """
-    # if fermata
-    num = 0
-    if inputs[voice_id][index][2]:
-        num = 0
-    else:
-        for k in range(index, len(inputs[voice_id])):
-            if inputs[voice_id][k][2]:
-                num = ((k - k % SUBDIVISION) - (index - index % SUBDIVISION)) // SUBDIVISION
-                break
-    if num <= range_fermata:
-        return np.array([0, 1], dtype=np.int32)
-    else:
-        return np.array([1, 0], dtype=np.int32)
-
-
-def next_fermata_in(inputs, voice_id, index):
-    # if fermata
-    num = 0
-    if inputs[voice_id][index][2]:
-        num = 0
-    else:
-        for k in range(index, len(inputs[voice_id])):
-            if inputs[voice_id][k][2]:
-                num = ((k - k % SUBDIVISION) - (index - index % SUBDIVISION)) / SUBDIVISION
-                break
-    return np.array(list(map(lambda x: x == num, range(BITS_FERMATA))), dtype=np.int32)
-
-
 def chorale_to_inputs(chorale, num_voices, index2notes, note2indexes):
     """
     :param chorale: music21 chorale
@@ -409,7 +256,6 @@ def _min_max_midi_pitch(note_strings):
 
 
 def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, metadatas=None):
-    # todo transposition
     X = []
     X_metadatas = []
     index2notes, note2indexes = create_index_dicts(chorale_list, num_voices=num_voices)
@@ -455,23 +301,9 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, meta
         except (AttributeError, IndexError):
             pass
 
-    # todo save metadatas objects in pickle file
-    dataset = (X, X_metadatas, num_voices, index2notes, note2indexes)
+    dataset = (X, X_metadatas, num_voices, index2notes, note2indexes, metadatas)
     pickle.dump(dataset, open(dataset_name, 'wb'), pickle.HIGHEST_PROTOCOL)
     print(str(len(X)) + ' files written in ' + dataset_name)
-
-
-#
-# def p_to_onehot(p, min_pitch, max_pitch):
-#     """
-#     pitch to one hot
-#     :param p:
-#     :param min_pitch:
-#     :param max_pitch: included !
-#     :return: np.array of shape (max_pitch - min_pitch + 1)
-#     """
-#     return np.array(p == np.arange(min_pitch, max_pitch + 1),
-#                     dtype=np.float32)
 
 
 def to_onehot(index, num_indexes):
@@ -518,13 +350,13 @@ def all_features(chorale, voice_index, time_index, timesteps, num_pitches, num_v
                                            num_pitches[mask])
 
     # put timesteps=None to only have the current beat
-    beat = to_beat(time_index, timesteps=timesteps)
+    # beat is now considered as a metadata
+    # beat = to_beat(time_index, timesteps=timesteps)
     label = to_onehot(chorale[time_index, voice_index], num_indexes=num_pitches[voice_index])
 
     return (np.array(left_feature),
             np.array(central_feature),
             np.array(right_feature),
-            beat,
             np.array(label)
             )
 
@@ -548,7 +380,7 @@ def all_metadatas(chorale_metadatas, time_index=None, timesteps=None, metadatas=
 
 def generator_from_raw_dataset(batch_size, timesteps, voice_index,
                                phase='train', percentage_train=0.8, pickled_dataset=BACH_DATASET,
-                               transpose=True, metadatas=None):
+                               transpose=True):
     """
      Returns a generator of
             (left_features,
@@ -562,7 +394,7 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
             where fermatas = (fermatas_left, central_fermatas, fermatas_right)
     """
 
-    X, X_metadatas, num_voices, index2notes, note2indexes = pickle.load(open(pickled_dataset, 'rb'))
+    X, X_metadatas, num_voices, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
     num_pitches = list(map(lambda x: len(x), index2notes))
 
     # Set chorale_indices
@@ -574,9 +406,6 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
     left_features = []
     right_features = []
     central_features = []
-    beats = []
-    beats_right = []
-    beats_left = []
     left_metas = []
     right_metas = []
     metas = []
@@ -613,17 +442,12 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
                                                     time_index=time_index, timesteps=timesteps)
 
         (left_feature, central_feature, right_feature,
-         (beat_left, beat, beat_right),
          label
          ) = features
 
         left_features.append(left_feature)
         right_features.append(right_feature)
         central_features.append(central_feature)
-
-        beats.append(beat)
-        beats_right.append(beat_right)
-        beats_left.append(beat_left)
 
         left_metas.append(left_meta)
         right_metas.append(right_meta)
@@ -634,18 +458,16 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
 
         # if there is a full batch
         if batch == batch_size:
-            next_element = (np.array(left_features, dtype=np.float32),
-                            np.array(central_features, dtype=np.float32),
-                            np.array(right_features, dtype=np.float32),
-                            (np.array(beats_left, dtype=np.float32),
-                             np.array(beats, dtype=np.float32),
-                             np.array(beats_right, dtype=np.float32)
-                             ),
-                            (np.array(left_metas, dtype=np.float32),
-                             np.array(metas, dtype=np.float32),
-                             np.array(right_metas, dtype=np.float32)
-                             ),
-                            np.array(labels, dtype=np.float32))
+            next_element = (
+                (np.array(left_features, dtype=np.float32),
+                 np.array(central_features, dtype=np.float32),
+                 np.array(right_features, dtype=np.float32)
+                 ),
+                (np.array(left_metas, dtype=np.float32),
+                 np.array(metas, dtype=np.float32),
+                 np.array(right_metas, dtype=np.float32)
+                 ),
+                np.array(labels, dtype=np.float32))
 
             yield next_element
 
@@ -654,9 +476,6 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
             left_features = []
             central_features = []
             right_features = []
-            beats = []
-            beats_left = []
-            beats_right = []
             left_metas = []
             right_metas = []
             metas = []
@@ -732,7 +551,7 @@ def seqs_to_stream(seqs):
 
 
 def indexed_chorale_to_score(seq, pickled_dataset):
-    _, _, _, index2notes, note2indexes = pickle.load(open(pickled_dataset, 'rb'))
+    _, _, _, index2notes, note2indexes, _ = pickle.load(open(pickled_dataset, 'rb'))
     num_pitches = list(map(len, index2notes))
     slur_indexes = list(map(lambda d: d[SLUR_SYMBOL], note2indexes))
 
@@ -810,12 +629,34 @@ def initialization(dataset_path=None, metadatas=None):
         chorale_list = filter_file_list(corpus.getBachChorales(fileExtensions='xml'))
         pickled_dataset = BACH_DATASET
 
+    # remove wrong chorales:
     min_pitches, max_pitches = compute_min_max_pitches(chorale_list, voices=voice_ids)
 
     make_dataset(chorale_list, pickled_dataset,
                  num_voices=len(voice_ids),
                  transpose=True,
                  metadatas=metadatas)
+
+
+# specific methods when number of rests
+def split_note(n, max_length):
+    """
+    :param n:
+    :param max_length: in quarter length
+    :return:
+    """
+    if n.duration.quarterLength > max_length:
+        l = []
+        o = n.offset
+        while o < n.offset + max_length:
+            # new note
+            f = standard_note(standard_name(n))
+            new_length = max_length - o % max_length
+            f.duration.quarterLength = (new_length)
+            l.append(f)
+            o = new_length
+    else:
+        return [n]
 
 
 if __name__ == '__main__':
