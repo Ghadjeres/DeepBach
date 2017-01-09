@@ -65,7 +65,6 @@ def generation(model_base_name, models, timesteps, melody=None, chorale_metas=No
     return seq
 
 
-
 # def gibbs(models=None, melody=None, fermatas_melody=None, sequence_length=50, num_iterations=1000,
 #           timesteps=16,
 #           model_base_name='models/raw_dataset/tmp/',
@@ -589,7 +588,7 @@ def main():
         num_voices = NUM_VOICES
         melody = None
         # todo find a better way to set metadatas
-        chorale_metas = [metas[:sequence_length] for metas in X_metadatas[10]]
+        chorale_metas = [metas[:sequence_length] for metas in X_metadatas[11]]
         # chorale_metas = []
         # chorale_metas.append(np.zeros((len(melody), )))
         # chorale_metas.append(np.full((len(melody),), 8))
