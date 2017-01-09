@@ -115,10 +115,11 @@ MuseScore {
                         }
                     }
                 }
-                request.open("POST", serverAddressInput.text, true)
+                request.open("POST", serverAddressInput.text + 'compose', true)
                 request.setRequestHeader("Content-Type", "application/x-www-form-urlencoded")
                 statusLabel.text = 'Loading...'
                 request.send(content)
+                return false
             }
         }
         Label {

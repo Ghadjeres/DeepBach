@@ -426,7 +426,7 @@ def parallel_gibbs(models=None, melody=None, chorale_metas=None, sequence_length
     # Main loop
     for iteration in tqdm(range(num_iterations)):
 
-        temperature = max(min_temperature, temperature * 0.999)  # Recuit
+        temperature = max(min_temperature, temperature * 0.9992)  # Recuit
         print(temperature)
 
         time_indexes = {}
@@ -715,11 +715,15 @@ def main():
     print(args)
 
     # fixed set of metadatas to use when CREATING the dataset
-    # metadatas = [FermataMetadatas(), KeyMetadatas(windowSize=1), TickMetadatas(SUBDIVISION), ModeMetadatas()]
-    metadatas = [TickMetadatas(SUBDIVISION), FermataMetadatas()]
+    # metadatas = [FermataMetadatas(), KeyMetadatas(window_size=1), TickMetadatas(SUBDIVISION), ModeMetadatas()]
+    metadatas = [TickMetadatas(SUBDIVISION), FermataMetadatas(), KeyMetadatas(window_size=1)]
+
+    if args.ext:
+        ext = '_' + args.ext
+    else:
+        ext = ''
 
     # datasets
-
     # set pickled_dataset argument
     if args.dataset:
         dataset_path = args.dataset
@@ -741,10 +745,6 @@ def main():
     samples_per_epoch = args.samples_per_epoch
     nb_val_samples = args.num_val_samples
     num_units_lstm = args.num_units_lstm
-    if args.ext:
-        ext = '_' + args.ext
-    else:
-        ext = ''
     model_name = args.name.lower() + ext
     sequence_length = args.length
     batch_size_per_voice = args.parallel
@@ -764,9 +764,16 @@ def main():
     elif args.reharmonization:
         melody = X[args.reharmonization][0, :]
         num_voices = NUM_VOICES - 1
+        chorale_metas = X_metadatas[args.reharmonization]
     else:
         num_voices = NUM_VOICES
         melody = None
+        # todo find a better way to set metadatas
+        chorale_metas = [metas[:sequence_length] for metas in X_metadatas[10]]
+        # chorale_metas = []
+        # chorale_metas.append(np.zeros((len(melody), )))
+        # chorale_metas.append(np.full((len(melody),), 8))
+
     num_iterations = args.num_iterations // batch_size_per_voice // num_voices
     parallel = batch_size_per_voice > 1
     train = args.train > 0
@@ -784,10 +791,8 @@ def main():
         models = load_models(model_name, num_voices=NUM_VOICES)
     temperature = 1.
     timesteps = int(models[0].input[0]._keras_shape[1])
-    chorale_metas = X_metadatas[199]
-    # chorale_metas = []
-    # chorale_metas.append(np.zeros((len(melody), )))
-    # chorale_metas.append(np.full((len(melody),), 8))
+
+
 
     seq = generation(model_base_name=model_name, models=models,
                      timesteps=timesteps,

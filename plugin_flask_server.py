@@ -206,13 +206,14 @@ def compose():
                                           )
         # make chorale time major
         input_chorale = np.transpose(input_chorale, axes=(1, 0))
-
+        print('non')
         NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE = 120
         start_tick_selection = float(request.form['start_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE
         end_tick_selection = float(request.form['end_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE
+        print('ouiii')
         start_voice_index = int(request.form['start_staff'])
         end_voice_index = int(request.form['end_staff'])
-
+        print('oui')
         # if no selection
         if start_tick_selection == 0 and end_tick_selection == 0:
             chorale_length = input_chorale.shape[0]
@@ -269,12 +270,16 @@ def test_generation():
 
 @app.route('/models', methods=['GET'])
 def models():
-    # for test
+    global models_list
+    # recompute model names present in folder models/
+    models_list = glob('models/*.yaml')
+    models_list = list(set(map(lambda name: '_'.join(name.split('_')[:-1]).split('/')[-1], models_list)))
     return jsonify(models_list)
 
 
 @app.route('/current_model', methods=['POST', 'PUT'])
 def current_model_update():
+    global model_name
     model_name = request.form['model_name']
     models = load_models(model_base_name=model_name, num_voices=num_voices)
     return jsonify('Model ' + model_name + ' loaded')
@@ -282,4 +287,5 @@ def current_model_update():
 
 @app.route('/current_model', methods=['GET'])
 def current_model_get():
+    global model_name
     return model_name

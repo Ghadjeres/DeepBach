@@ -24,6 +24,9 @@ class Metadata:
         """
         raise NotImplementedError
 
+    def generate(self, length):
+        raise NotImplementedError
+
 
 # todo BeatMetadata class
 # todo add strong/weak beat metadata
@@ -45,6 +48,12 @@ class TickMetadatas(Metadata):
     def evaluate(self, chorale):
         # suppose all pieces start on a beat
         length = int(chorale.duration.quarterLength * SUBDIVISION)
+        return np.array(list(map(
+            lambda x: x % self.num_values,
+            range(length)
+        )))
+
+    def generate(self, length):
         return np.array(list(map(
             lambda x: x % self.num_values,
             range(length)
@@ -89,6 +98,9 @@ class ModeMetadatas(Metadata):
 
         return np.array(modes, dtype=np.int32)
 
+    def generate(self, length):
+        return np.full((length,), self.get_index('major'))
+
 
 class KeyMetadatas(Metadata):
     def __init__(self, window_size=4):
@@ -130,12 +142,15 @@ class KeyMetadatas(Metadata):
             beat_index = time_index / SUBDIVISION
             if beat_index in measure_offset_map:
                 measure_index += 1
-            key_signatures[time_index] = res[measure_index].sharps + self.num_max_sharps + 1
+            key_signatures[time_index] = self.get_index(res[measure_index].sharps)
         return np.array(key_signatures, dtype=np.int32)
+
+    def generate(self, length):
+        return np.full((length,), self.get_index(0))
 
 
 class FermataMetadatas(Metadata):
-    def __init__(self, ):
+    def __init__(self):
         self.is_global = False
         self.num_values = 2
 
@@ -176,3 +191,8 @@ class FermataMetadatas(Metadata):
                 fermatas[i] = fermata
                 i += 1
         return np.array(fermatas, dtype=np.int32)
+
+    def generate(self, length):
+        # fermata every 2 bars
+        return np.array([1 if i % 32 > 28 else 0
+                         for i in range(length)])
