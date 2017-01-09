@@ -7,10 +7,11 @@ Created on 7 mars 2016
 """
 import pickle
 
+from music21.analysis.floatingKey import FloatingKeyException
 from tqdm import tqdm
 
 import numpy as np
-from music21 import corpus, converter, stream, note, duration, analysis
+from music21 import corpus, converter, stream, note, duration, analysis, interval
 
 NUM_VOICES = 4
 
@@ -275,7 +276,8 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, meta
                 max_transposition = min(max_midi_pitches - max_midi_pitches_current)
                 for t in range(min_transposition, max_transposition + 1):
                     try:
-                        chorale_tranposed = chorale.transpose(t)
+                        transposition_interval = interval.convertSemitoneToSpecifierGeneric(t)
+                        chorale_tranposed = chorale.transpose(transposition_interval)
                         inputs = chorale_to_inputs(chorale_tranposed, num_voices=num_voices, index2notes=index2notes,
                                                    note2indexes=note2indexes
                                                    )
@@ -291,6 +293,8 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, meta
                         X_metadatas.append(md)
                     except KeyError:
                         pass
+                    except FloatingKeyException:
+                        print('FloatingKeyException: File ' + chorale_file + ' skipped')
             else:
                 print("Warning: no transposition! shouldn't be used!")
                 inputs = chorale_to_inputs(chorale, num_voices=num_voices,
@@ -648,15 +652,28 @@ def split_note(n, max_length):
     if n.duration.quarterLength > max_length:
         l = []
         o = n.offset
-        while o < n.offset + max_length:
+        start = n.offset
+        end = n.offset + n.duration.quarterLength
+
+        while o < n.offset + n.duration.quarterLength:
             # new note
             f = standard_note(standard_name(n))
-            new_length = max_length - o % max_length
+            if o + max_length:
+                # todo tout est faux !
+                new_length = max_length - o % max_length
             f.duration.quarterLength = (new_length)
             l.append(f)
-            o = new_length
+            o += new_length
     else:
         return [n]
+
+
+def split_part(part, max_length, part_index=-1):
+    new_part = stream.Part(id='part' + str(part_index))
+    for n in part.notesAndRests:
+        for new_note in split_note(n, max_length):
+            new_part.append(new_note)
+    return new_part
 
 
 if __name__ == '__main__':
