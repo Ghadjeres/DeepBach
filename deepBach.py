@@ -8,7 +8,7 @@ import os
 import pickle
 
 from keras.models import model_from_json, model_from_yaml
-from models_zoo import deepBach, skip
+from models_zoo import deepBach, deepbach_skip_connections
 from music21 import midi, converter
 from tqdm import tqdm
 
@@ -378,11 +378,11 @@ def create_models(model_name=None, create_new=False, num_dense=200, num_units_ls
                              num_features_meta=left_metas.shape[-1],
                              num_dense=num_dense, num_units_lstm=num_units_lstm)
         elif 'skip' in model_name:
-            model = skip(num_features_lr=left_features.shape[-1],
-                         num_features_c=central_features.shape[-1],
-                         num_features_meta=left_metas.shape[-1],
-                         num_pitches=num_pitches[voice_index],
-                         num_dense=num_dense, num_units_lstm=num_units_lstm, timesteps=timesteps)
+            model = deepbach_skip_connections(num_features_lr=left_features.shape[-1],
+                                              num_features_c=central_features.shape[-1],
+                                              num_features_meta=left_metas.shape[-1],
+                                              num_pitches=num_pitches[voice_index],
+                                              num_dense=num_dense, num_units_lstm=num_units_lstm, timesteps=timesteps)
         else:
             raise ValueError
 

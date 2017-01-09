@@ -73,8 +73,8 @@ def deepBach(num_features_lr, num_features_c, num_pitches, num_features_meta, nu
     return model
 
 
-def skip(num_features_lr, num_features_c, num_features_meta, num_pitches, num_units_lstm=[200],
-         num_dense=200, timesteps=16):
+def deepbach_skip_connections(num_features_lr, num_features_c, num_features_meta, num_pitches, num_units_lstm=[200],
+                              num_dense=200, timesteps=16):
     """
 
     :param num_features_lr: size of left or right features vectors
@@ -114,6 +114,7 @@ def skip(num_features_lr, num_features_c, num_features_meta, num_pitches, num_un
 
     # central NN
     predictions_center = Dense(num_dense, activation='relu')(predictions_center)
+    # predictions_center = Dropout(0.5)(predictions_center)
     predictions_center = Dense(num_dense, activation='relu')(predictions_center)
 
     # left and right recurrent networks
@@ -146,8 +147,8 @@ def skip(num_features_lr, num_features_c, num_features_meta, num_pitches, num_un
                                  )(predictions_right)
 
         # todo dropout here?
-        predictions_left = Dropout(0.5)(predictions_left)
-        predictions_right = Dropout(0.5)(predictions_right)
+        # predictions_left = Dropout(0.5)(predictions_left)
+        # predictions_right = Dropout(0.5)(predictions_right)
 
     # retain only last input for skip connections
     predictions_left_old = Lambda(lambda t: t[:, -1, :],
@@ -176,4 +177,3 @@ def skip(num_features_lr, num_features_c, num_features_meta, num_pitches, num_un
                   metrics=['accuracy'])
     model.summary()
     return model
-

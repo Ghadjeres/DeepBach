@@ -190,6 +190,7 @@ chorale_metas = X_metadatas[199]
 
 @app.route('/compose', methods=['POST'])
 def compose():
+    global models
     # --- Parse request---
     with tempfile.NamedTemporaryFile(mode='w', suffix='.xml') as file:
         print(file.name)
@@ -206,14 +207,11 @@ def compose():
                                           )
         # make chorale time major
         input_chorale = np.transpose(input_chorale, axes=(1, 0))
-        print('non')
         NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE = 120
         start_tick_selection = float(request.form['start_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE
         end_tick_selection = float(request.form['end_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE
-        print('ouiii')
         start_voice_index = int(request.form['start_staff'])
         end_voice_index = int(request.form['end_staff'])
-        print('oui')
         # if no selection
         if start_tick_selection == 0 and end_tick_selection == 0:
             chorale_length = input_chorale.shape[0]
@@ -280,9 +278,10 @@ def models():
 @app.route('/current_model', methods=['POST', 'PUT'])
 def current_model_update():
     global model_name
+    global models
     model_name = request.form['model_name']
     models = load_models(model_base_name=model_name, num_voices=num_voices)
-    return jsonify('Model ' + model_name + ' loaded')
+    return 'Model ' + model_name + ' loaded'
 
 
 @app.route('/current_model', methods=['GET'])
