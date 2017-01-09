@@ -1,6 +1,6 @@
-import QtQuick 2.1
-import QtQuick.Dialogs 1.0
-import QtQuick.Controls 1.0
+import QtQuick 2.2
+import QtQuick.Dialogs 1.2
+import QtQuick.Controls 1.1
 import MuseScore 1.0
 import FileIO 1.0
 
@@ -10,25 +10,54 @@ MuseScore {
     description: qsTr("This plugin calls deepBach project.")
     pluginType: "dock"
     dockArea:   "left"
+    property variant serverCalled: false
+    property variant loading: false
+    property variant linesLogged: 0
     FileIO {
         id: myFile
         source: tempPath() + "/" + mainMuseScoreObj.curScore.title + "_recomposed_by_deepBach.xml"
         onError: console.log(msg)
     }
     onRun: {
-        var requestModels = new XMLHttpRequest()
-        requestModels.open("GET", serverAddressInput.text + 'models', true)
-        requestModels.onreadystatechange = function() {
-            if (requestModels.readyState == XMLHttpRequest.DONE) {
-                modelSelector.model = JSON.parse(requestModels.responseText)
+        console.log('on run called')
+        if (mainMuseScoreObj.serverCalled !== serverAddressInput.text || modelSelector.model.length === 0) {
+            var requestModels = getRequestObj('GET', 'models')
+            if (call(
+                requestModels,
+                false,
+                function(responseText){
+                    mainMuseScoreObj.serverCalled = serverAddressInput.text;
+                    try {
+                        modelSelector.model = JSON.parse(responseText)
+                        logStatus('Models list loaded')
+                        var requestLoadModel = getRequestObj("GET", 'current_model')
+                        call(
+                            requestLoadModel,
+                            false,
+                            function(response) {
+                                logStatus('currently loaded model is ' + response)
+                                for (var i in modelSelector.model) {
+                                    if (modelSelector.model[i] === response) {
+                                        console.log('set selected at ' + i)
+                                        modelSelector.currentIndex = i
+                                    }
+                                }
+                            }
+                        )
+                    } catch(error) {
+                        console.log(error)
+                        logStatus('No models found')
+                    }
+
+                }
+            )) {
+                logStatus('Retrieving models list at ' + serverAddressInput.text)
             }
         }
-        requestModels.send()
     }
     Rectangle {
         id: wrapperPanel
         color: "white"
-        anchors.fill: parent
         Text {
             id: title
             text: "Deep Bach"
@@ -57,7 +86,8 @@ MuseScore {
             width: 200
             height: 20
             onEditingFinished: {
-                  mainMuseScoreObj.onRun();
+                console.log('editing finished')
+                mainMuseScoreObj.onRun();
             } 
         }
         ComboBox {
@@ -66,18 +96,28 @@ MuseScore {
             anchors.topMargin: 15
             model: []
             width: 200
-            onCurrentIndexChanged: {
-                var requestLoadModel = new XMLHttpRequest()
-                requestLoadModel.open("POST", serverAddressInput.text + 'current_model', true)
-                var content = "model_name=" + modelSelector.model[modelSelector.currentIndex]
-                requestLoadModel.onreadystatechange = function() {
-                    if (requestLoadModel.readyState == XMLHttpRequest.DONE) {
-                        statusLabel.text = requestLoadModel.responseText
+        }
+        Button {
+            id : loadModel
+            anchors.top: modelSelector.top
+            anchors.left: modelSelector.right
+            anchors.leftMargin: 10
+            text: qsTr("Load")
+            onClicked: {
+                if (modelSelector.model[modelSelector.currentIndex]) {
+                    var requestLoadModel = getRequestObj("POST", 'current_model')
+                    if (call(
+                        requestLoadModel,
+                        {
+                            model_name: modelSelector.model[modelSelector.currentIndex]
+                        }, 
+                        function(response) {
+                            logStatus(response)
+                        }
+                    )) {
+                        logStatus('Loading model ' + modelSelector.model[modelSelector.currentIndex])
                     }
                 }
-                requestLoadModel.setRequestHeader("Content-Type", "application/x-www-form-urlencoded")
-                statusLabel.text = 'Loading model ' + modelSelector.model[modelSelector.currentIndex]
-                requestLoadModel.send(content)
             }
         }
         Button {
@@ -99,27 +139,28 @@ MuseScore {
                 // var targetFile = tempPath() + "/my_file." + extension
                 myFile.remove();
                 var res = writeScore(mainMuseScoreObj.curScore, myFile.source, extension)
-                var content = "start_staff=" + startStaff + "&end_staff=" + endStaff + "start_tick=" + startTick + "&end_tick=" + endTick + "&xml_string=" + encodeURIComponent(myFile.read())
-                var request = new XMLHttpRequest()
-                request.onreadystatechange = function() {
-                    statusLabel.text = statusLabel.text + '.'
-                    if (request.readyState == XMLHttpRequest.DONE) {
-                        var response = request.responseText
-                        // console.log("responseText : " + response)
+                var request = getRequestObj("POST", 'compose')
+                if (call(
+                    request,
+                    {
+                        start_staff: startStaff,
+                        end_staff: endStaff,
+                        start_tick: startTick,
+                        end_tick: endTick,
+                        xml_string: myFile.read()
+                    },
+                    function(response) {
                         if (response) {
-                            statusLabel.text = 'Done'
+                            logStatus('Done composing')
                             myFile.write(response)
                             readScore(myFile.source)
                         } else {
-                            statusLabel.text = 'Empty Response'
+                            logStatus('Got Empty Response when composing')
                         }
                     }
+                )) {
+                    logStatus('Composing...')
                 }
-                request.open("POST", serverAddressInput.text + 'compose', true)
-                request.setRequestHeader("Content-Type", "application/x-www-form-urlencoded")
-                statusLabel.text = 'Loading...'
-                request.send(content)
-                return false
             }
         }
         Label {
@@ -133,5 +174,56 @@ MuseScore {
             anchors.leftMargin: 10
             anchors.topMargin: 30
         }
+    }
+    function logStatus(text) {
+        mainMuseScoreObj.linesLogged++;
+        if (mainMuseScoreObj.linesLogged > 15) {
+            // break the textblock into an array of lines
+            var lines = statusLabel.text.split("\r\n");
+            // remove one line, starting at the first position
+            lines.splice(0,1);
+            // join the array back into a single string
+            statusLabel.text = lines.join("\r\n");
+        }
+        statusLabel.text += '- ' + text + "\r\n"
+    }
+    function getRequestObj(method, endpoint) {
+        console.debug('calling endpoint ' + endpoint)
+        var request = new XMLHttpRequest()
+        endpoint = endpoint || ''
+        request.open(method, serverAddressInput.text + endpoint, true)
+        return request
+    }
+    function call(request, params, cb) {
+        if (mainMuseScoreObj.loading) {
+            logStatus('refusing to call server')
+            return false
+        }
+        request.onreadystatechange = function() {
+            if (request.readyState == XMLHttpRequest.DONE) {
+                mainMuseScoreObj.loading = false;
+                cb(request.responseText);
+            }
+        }
+        if (params) {
+            request.setRequestHeader("Content-Type", "application/x-www-form-urlencoded")
+            var pairs = [];
+            for (var prop in params) {
+              if (params.hasOwnProperty(prop)) {
+                var k = encodeURIComponent(prop),
+                    v = encodeURIComponent(params[prop]);
+                pairs.push( k + "=" + v);
+              }
+            }
+
+            const content = pairs.join('&')
+            console.debug('params ' + content)
+            mainMuseScoreObj.loading = true;
+            request.send(content)
+        } else {
+            mainMuseScoreObj.loading = true;
+            request.send()
+        }
+        return true
     }
 }
