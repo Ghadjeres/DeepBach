@@ -89,6 +89,5 @@ ENV/
 .ropeproject
 
 # local files
-/models_zoo.py
 /stats/
 /datasets/Oll.xml

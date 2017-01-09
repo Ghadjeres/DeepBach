@@ -276,7 +276,7 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, meta
                 max_transposition = min(max_midi_pitches - max_midi_pitches_current)
                 for t in range(min_transposition, max_transposition + 1):
                     try:
-                        transposition_interval = interval.convertSemitoneToSpecifierGeneric(t)
+                        transposition_interval = interval.Interval(t)
                         chorale_tranposed = chorale.transpose(transposition_interval)
                         inputs = chorale_to_inputs(chorale_tranposed, num_voices=num_voices, index2notes=index2notes,
                                                    note2indexes=note2indexes
