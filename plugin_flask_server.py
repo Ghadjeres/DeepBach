@@ -201,7 +201,7 @@ def compose():
         # load chorale with music21
         input_chorale = converter.parse(file.name)
         input_chorale = chorale_to_inputs(input_chorale,
-                                          num_voices=num_voices,
+                                          voice_ids=num_voices,
                                           index2notes=index2notes,
                                           note2indexes=note2indexes
                                           )
