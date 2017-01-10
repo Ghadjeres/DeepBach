@@ -187,8 +187,8 @@ def chorale_to_inputs(chorale, voice_ids, index2notes, note2indexes):
     :return: (num_voices, time) matrix of indexes
     """
     inputs = []
-    for voice_index in voice_ids:
-        inputs.append(part_to_inputs(chorale.parts[voice_index], index2notes[voice_index], note2indexes[voice_index]))
+    for voice_index, voice_id in enumerate(voice_ids):
+        inputs.append(part_to_inputs(chorale.parts[voice_id], index2notes[voice_index], note2indexes[voice_index]))
     return np.array(inputs)
 
 
@@ -269,7 +269,7 @@ def make_dataset(chorale_list, dataset_name, voice_ids=voice_ids_default, transp
         try:
             chorale = converter.parse(chorale_file)
             if transpose:
-                midi_pitches = [[n.pitch.midi for n in part.flat.notes] for part in chorale.parts]
+                midi_pitches = [[n.pitch.midi for n in chorale.parts[voice_id].flat.notes] for voice_id in voice_ids]
                 min_midi_pitches_current = np.array([min(l) for l in midi_pitches])
                 max_midi_pitches_current = np.array([max(l) for l in midi_pitches])
                 min_transposition = max(min_midi_pitches - min_midi_pitches_current)
@@ -292,7 +292,7 @@ def make_dataset(chorale_list, dataset_name, voice_ids=voice_ids_default, transp
                         X.append(inputs)
                         X_metadatas.append(md)
                     except KeyError:
-                        pass
+                        print('KeyError: File ' + chorale_file + ' skipped')
                     except FloatingKeyException:
                         print('FloatingKeyException: File ' + chorale_file + ' skipped')
             else:
@@ -594,12 +594,12 @@ def create_index_dicts(chorale_list, voice_ids=voice_ids_default):
     """
     # store all notes
     voice_ranges = []
-    for voice_index in voice_ids:
+    for voice_id in voice_ids:
         voice_range = set()
         for chorale_path in chorale_list:
             # todo transposition
             chorale = converter.parse(chorale_path)
-            part = chorale.parts[voice_index].flat
+            part = chorale.parts[voice_id].flat
             for n in part.notesAndRests:
                 voice_range.add(standard_name(n))
         # add additional symbols
@@ -630,7 +630,7 @@ def initialization(dataset_path=None, metadatas=None, voice_ids=voice_ids_defaul
                                         num_voices=NUM_VOICES)
         pickled_dataset = 'datasets/custom_dataset/' + dataset_path.split('/')[-1] + '.pickle'
     else:
-        chorale_list = filter_file_list(corpus.getBachChorales(fileExtensions='xml'))
+        chorale_list = filter_file_list(corpus.getBachChorales(fileExtensions='xml')[:10])
         pickled_dataset = BACH_DATASET
 
     # remove wrong chorales:

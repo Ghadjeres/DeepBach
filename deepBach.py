@@ -535,7 +535,7 @@ def main():
 
     # fixed set of metadatas to use when CREATING the dataset
     # metadatas = [FermataMetadatas(), KeyMetadatas(window_size=1), TickMetadatas(SUBDIVISION), ModeMetadatas()]
-    metadatas = [TickMetadatas(SUBDIVISION), FermataMetadatas(), KeyMetadatas(window_size=1)]
+    metadatas = [TickMetadatas(SUBDIVISION), FermataMetadatas()]
 
     if args.ext:
         ext = '_' + args.ext
