@@ -14,9 +14,9 @@ from tqdm import tqdm
 
 from data_utils import generator_from_raw_dataset, BACH_DATASET, all_features, \
     indexed_chorale_to_score, \
-    initialization, START_SYMBOL, END_SYMBOL, part_to_inputs, \
-    NUM_VOICES, all_metadatas
+    initialization, START_SYMBOL, END_SYMBOL, part_to_inputs, all_metadatas, standard_note, SOP, BASS
 from metadata import *
+
 
 
 def generation(model_base_name, models, timesteps, melody=None, chorale_metas=None,
@@ -28,12 +28,12 @@ def generation(model_base_name, models, timesteps, melody=None, chorale_metas=No
     # todo -p parameter
     parallel = True
     if parallel:
-        seq = parallel_gibbs(models=models, model_base_name=model_base_name,
-                             melody=melody, chorale_metas=chorale_metas, timesteps=timesteps,
-                             num_iterations=num_iterations, sequence_length=sequence_length,
-                             temperature=temperature,
-                             initial_seq=initial_seq, batch_size_per_voice=batch_size_per_voice,
-                             parallel_updates=True, pickled_dataset=pickled_dataset)
+        seq = canon(models=models, model_base_name=model_base_name,
+                    chorale_metas=chorale_metas, timesteps=timesteps,
+                    num_iterations=num_iterations, sequence_length=sequence_length,
+                    temperature=temperature,
+                    batch_size_per_voice=batch_size_per_voice,
+                    pickled_dataset=pickled_dataset)
 
     else:
         # todo refactor
@@ -245,7 +245,7 @@ def parallel_gibbs(models=None, melody=None, chorale_metas=None, sequence_length
     # Main loop
     for iteration in tqdm(range(num_iterations)):
 
-        temperature = max(min_temperature, temperature * 0.999)  # Recuit
+        temperature = max(min_temperature, temperature * 0.9992)  # Recuit
         print(temperature)
 
         time_indexes = {}
@@ -315,6 +315,227 @@ def parallel_gibbs(models=None, melody=None, chorale_metas=None, sequence_length
                     seq[time_indexes[voice_index][batch_index], voice_index] = pitch
 
     return seq[timesteps:-timesteps, :]
+
+
+def _diatonic_note_names2indexes(index2notes):
+    ds = []
+    # build diatonic_note_num 2 indexes dict
+    for voice_index, index2note in enumerate(index2notes):
+        d = {}
+        for i in range(len(index2note)):
+            n = standard_note(index2note[i])
+            if n.isNote:
+                diatonic_note_num = n.pitch.diatonicNoteNum
+            else:
+                diatonic_note_num = -1
+            if diatonic_note_num in d:
+                d.update({diatonic_note_num: d.get(diatonic_note_num) + [i]})
+            else:
+                d.update({diatonic_note_num: [i]})
+        ds.append(d)
+    # transform as numpy arrays
+    for d in ds:
+        for k in d:
+            d.update({k: np.array(d.get(k))})
+    return ds
+
+
+def canon(models=None, chorale_metas=None, sequence_length=50, num_iterations=1000,
+          timesteps=16,
+          model_base_name='models/raw_dataset/tmp/',
+          temperature=1., batch_size_per_voice=16,
+          pickled_dataset=BACH_DATASET,
+          intervals=[7], delays=[32],
+          ):
+    """
+    samples from models in model_base_name
+    """
+    # load dataset
+    X, X_metadatas, voice_ids, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
+
+
+    # variables
+    num_voices = len(voice_ids)
+    assert num_voices == 2
+
+    num_pitches = list(map(len, index2notes))
+    max_delay = max(delays)
+    delays = np.array([0] + delays)
+    intervals = np.array([0] + intervals)
+
+    # compute tables
+    diatonic_note_names2indexes = _diatonic_note_names2indexes(index2notes)
+    print(diatonic_note_names2indexes)
+    # load models if not
+    if models is None:
+        for expert_index in range(num_voices):
+            model_name = model_base_name + str(expert_index)
+
+            model = load_model(model_name=model_name, yaml=False)
+            models.append(model)
+
+    seq = np.zeros(shape=(2 * timesteps + max_delay + sequence_length, num_voices))
+    for expert_index in range(num_voices):
+        # Add start and end symbol + random init
+        seq[:timesteps, expert_index] = [note2indexes[expert_index][START_SYMBOL]] * timesteps
+        seq[timesteps:-timesteps - max_delay, expert_index] = np.random.randint(num_pitches[expert_index],
+                                                                                size=sequence_length)
+
+        seq[-timesteps - max_delay:, expert_index] = [note2indexes[expert_index][END_SYMBOL]] * (timesteps + max_delay)
+
+    if chorale_metas is not None:
+        # chorale_metas is a list
+        extended_chorale_metas = [np.concatenate((np.zeros((timesteps,)),
+                                                  chorale_meta,
+                                                  np.zeros((timesteps + max_delay,))),
+                                                 axis=0)
+                                  for chorale_meta in chorale_metas]
+
+    else:
+        raise NotImplementedError
+
+    min_temperature = temperature
+    temperature = 1.5
+
+    # Main loop
+    for iteration in tqdm(range(num_iterations)):
+
+        temperature = max(min_temperature, temperature * 0.9995)  # Recuit
+        print(temperature)
+
+        time_indexes = {}
+        probas = {}
+
+        for voice_index in range(num_voices):
+            batch_input_features = []
+            time_indexes[voice_index] = []
+
+            for batch_index in range(batch_size_per_voice):
+                # soprano based
+                if voice_index == 0:
+                    time_index = np.random.randint(timesteps, sequence_length + timesteps)
+                else:
+                    # time_index = sequence_length + timesteps * 2 - time_indexes[0][batch_index]
+                    time_index = time_indexes[0][batch_index] + delays[voice_index]
+
+
+                time_indexes[voice_index].append(time_index)
+
+                (left_feature,
+                 central_feature,
+                 right_feature,
+                 label) = all_features(seq, voice_index, time_index, timesteps, num_pitches, num_voices)
+
+                left_metas, central_metas, right_metas = all_metadatas(chorale_metadatas=extended_chorale_metas,
+                                                                       metadatas=metadatas,
+                                                                       time_index=time_index, timesteps=timesteps)
+
+                input_features = {'left_features': left_feature[:, :],
+                                  'central_features': central_feature[:],
+                                  'right_features': right_feature[:, :],
+                                  'left_metas': left_metas,
+                                  'central_metas': central_metas,
+                                  'right_metas': right_metas}
+
+                # list of dicts: predict need dict of numpy arrays
+                batch_input_features.append(input_features)
+
+            # convert input_features
+            batch_input_features = {key: np.array([input_features[key] for input_features in batch_input_features])
+                                    for key in batch_input_features[0].keys()
+                                    }
+            # make all estimations
+            probas[voice_index] = models[voice_index].predict(batch_input_features,
+                                                              batch_size=batch_size_per_voice)
+
+
+        # parallel updates
+        for batch_index in range(batch_size_per_voice):
+            # create list of masks for each note name
+            proba_sop = probas[SOP][batch_index]
+            proba_bass = probas[BASS][batch_index]
+
+            proba_sop_split = _split_proba(proba_sop, diatonic_note_names2indexes[SOP])
+            proba_bass_split = _split_proba(proba_bass, diatonic_note_names2indexes[BASS])
+
+            interval = intervals[1]
+
+            # multiply probas
+            canon_product_probas, index_merge2pitches = _merge_probas_canon(proba_sop_split, proba_bass_split,
+                                                                            interval,
+                                                                            diatonic_note_names2indexes)
+
+            # draw
+            # use temperature
+            canon_product_probas /= np.sum(canon_product_probas)
+            canon_product_probas = np.log(canon_product_probas) / temperature
+            canon_product_probas = np.exp(canon_product_probas) / np.sum(np.exp(canon_product_probas)) - 1e-7
+
+            # pitch can include slur_symbol
+            index_drawn_pitches = np.argmax(np.random.multinomial(1, canon_product_probas))
+            pitches = index_merge2pitches[index_drawn_pitches]
+            for voice_index, pitch in enumerate(pitches):
+                seq[time_indexes[voice_index][batch_index], voice_index] = pitch
+
+    return seq[timesteps:-timesteps, :]
+
+
+def _split_proba(proba_sop, diatonic_note_name2indexes):
+    dnn2probas = {}
+    for diatonic_note_name in diatonic_note_name2indexes:
+        dnn2probas.update({diatonic_note_name: proba_sop[diatonic_note_name2indexes[diatonic_note_name]]})
+    return dnn2probas
+
+
+def _merge_probas_canon(proba_sop_split, proba_bass_split, interval, diatonic_note_names2indexes):
+    # todo generalize to multiple voices
+    merge_probas = []
+    index = 0
+    index_merge2pitches = {}
+    for dnn_sop in proba_sop_split:
+        for dnn_bass in proba_bass_split:
+            # when identical notes up to transformation
+            if dnn_sop == dnn_bass + interval or dnn_sop == dnn_bass == -1:
+                # multiply all probas
+                for p_sop_index, p_sop in enumerate(proba_sop_split[dnn_sop]):
+                    for p_bass_index, p_bass in enumerate(proba_bass_split[dnn_bass]):
+                        # multiplication
+                        merge_probas.append(p_sop * p_bass)
+                        # create table or index to pitches
+                        index_merge2pitches.update({index: [diatonic_note_names2indexes[SOP][dnn_sop][p_sop_index],
+                                                            diatonic_note_names2indexes[BASS][dnn_bass][p_bass_index]
+                                                            ]}
+                                                   )
+                        index += 1
+    return np.array(merge_probas), index_merge2pitches
+
+
+def _update_pitches_canon(probas, delays, intervals, index2notes, notes2index, diatonic_note_names2indexes,
+                          temperature=1.):
+    # create list of masks for each note name
+    proba_sop = probas[0][0]
+    proba_bass = probas[1][0]
+
+    proba_sop_split = _split_proba(proba_sop, diatonic_note_names2indexes[0])
+    proba_bass_split = _split_proba(proba_bass, diatonic_note_names2indexes[1])
+
+    interval = intervals[1]
+
+    # multiply probas
+    canon_product_probas, index_merge2pitches = _merge_probas_canon(proba_sop_split, proba_bass_split, interval,
+                                                                    diatonic_note_names2indexes)
+
+    # draw
+    # use temperature
+    canon_product_probas /= np.sum(canon_product_probas)
+    canon_product_probas = np.log(canon_product_probas) / temperature
+    canon_product_probas = np.exp(canon_product_probas) / np.sum(np.exp(canon_product_probas)) - 1e-7
+
+    # pitch can include slur_symbol
+    index_drawn_pitches = np.argmax(np.random.multinomial(1, canon_product_probas))
+    pitches = index_merge2pitches[index_drawn_pitches]
+
+    return pitches
 
 
 # Utils
@@ -557,8 +778,10 @@ def main():
                        voice_ids=[0, 3])
 
     # load dataset
-    X, X_metadatas, num_voices, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset,
-                                                                                        'rb'))
+    X, X_metadatas, voice_ids, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset,
+                                                                                       'rb'))
+    NUM_VOICES = len(voice_ids
+                     )
     num_pitches = list(map(len, index2notes))
     timesteps = args.timesteps
     batch_size = args.batch_size_train
@@ -589,7 +812,8 @@ def main():
         num_voices = NUM_VOICES
         melody = None
         # todo find a better way to set metadatas
-        chorale_metas = [metas[:sequence_length] for metas in X_metadatas[11]]
+        # chorale_metas = [metas[:sequence_length] for metas in X_metadatas[11]]
+        chorale_metas = [metas.generate(sequence_length) for metas in metadatas]
         # chorale_metas = []
         # chorale_metas.append(np.zeros((len(melody), )))
         # chorale_metas.append(np.full((len(melody),), 8))
