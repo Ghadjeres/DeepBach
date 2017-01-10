@@ -13,7 +13,7 @@ from tqdm import tqdm
 import numpy as np
 from music21 import corpus, converter, stream, note, duration, analysis, interval
 
-NUM_VOICES = 4
+NUM_VOICES = 2
 
 SUBDIVISION = 4  # quarter note subdivision
 BEAT_SIZE = 4
@@ -398,9 +398,9 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
             where fermatas = (fermatas_left, central_fermatas, fermatas_right)
     """
 
-    X, X_metadatas, num_voices, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
+    X, X_metadatas, voice_ids, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
     num_pitches = list(map(lambda x: len(x), index2notes))
-
+    num_voices = len(voice_ids)
     # Set chorale_indices
     if phase == 'train':
         chorale_indices = np.arange(int(len(X) * percentage_train))
@@ -630,7 +630,7 @@ def initialization(dataset_path=None, metadatas=None, voice_ids=voice_ids_defaul
                                         num_voices=NUM_VOICES)
         pickled_dataset = 'datasets/custom_dataset/' + dataset_path.split('/')[-1] + '.pickle'
     else:
-        chorale_list = filter_file_list(corpus.getBachChorales(fileExtensions='xml')[:10])
+        chorale_list = filter_file_list(corpus.getBachChorales(fileExtensions='xml'))
         pickled_dataset = BACH_DATASET
 
     # remove wrong chorales:
@@ -677,6 +677,5 @@ def split_part(part, max_length, part_index=-1):
 
 
 if __name__ == '__main__':
-    num_voices = 4
     make_dataset(None, BACH_DATASET, voice_ids=4, transpose=False)
     exit()
