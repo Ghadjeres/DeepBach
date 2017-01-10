@@ -210,9 +210,11 @@ def make_dataset(chorale_list, dataset_name, voice_ids=voice_ids_default, transp
                 max_midi_pitches_current = np.array([max(l) for l in midi_pitches])
                 min_transposition = max(min_midi_pitches - min_midi_pitches_current)
                 max_transposition = min(max_midi_pitches - max_midi_pitches_current)
-                for t in range(min_transposition, max_transposition + 1):
+                for semi_tone in range(min_transposition, max_transposition + 1):
                     try:
-                        transposition_interval = interval.Interval(t)
+                        # necessary, won't transpose correctly otherwise
+                        interval_type, interval_nature = interval.convertSemitoneToSpecifierGeneric(semi_tone)
+                        transposition_interval = interval.Interval(str(interval_nature) + interval_type)
                         chorale_tranposed = chorale.transpose(transposition_interval)
                         inputs = chorale_to_inputs(chorale_tranposed, voice_ids=voice_ids, index2notes=index2notes,
                                                    note2indexes=note2indexes
