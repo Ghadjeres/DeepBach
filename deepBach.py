@@ -139,8 +139,9 @@ def deepBach(num_features_lr, num_features_c, num_pitches, num_features_meta, nu
     return model
 
 
-def skip(num_features_lr, num_features_c, num_features_meta, num_pitches, num_units_lstm=[200],
-         num_dense=200, timesteps=16):
+def \
+        skip(num_features_lr, num_features_c, num_features_meta, num_pitches, num_units_lstm=[200],
+             num_dense=200, timesteps=16):
     """
 
     :param num_features_lr: size of left or right features vectors
@@ -164,25 +165,23 @@ def skip(num_features_lr, num_features_c, num_features_meta, num_pitches, num_un
     embedding_right = Dense(input_dim=num_features_lr + BEAT_SIZE + num_features_meta,
                             output_dim=num_dense, name='embedding_right')
 
-    predictions_left = TimeDistributed(embedding_left)(merge((left_features,
+    # dropout on inputs
+    predictions_left = Dropout(0.2)(TimeDistributed(embedding_left)(Dropout(0.2)(merge((left_features,
+                                                                           left_metas),
+                                                                          mode='concat'))))
+    predictions_right = Dropout(0.2)(TimeDistributed(embedding_right)(Dropout(0.2)(merge((right_features,
+                                                                             right_metas),
+                                                                            mode='concat'))))
 
-                                                              left_metas),
-                                                             mode='concat'))
-    predictions_right = TimeDistributed(embedding_right)(merge((right_features,
-
-                                                                right_metas),
-                                                               mode='concat'))
-
-    predictions_center = merge((central_features,
-                                central_metas), mode='concat')
+    predictions_center = Dropout(0.2)(merge((central_features,
+                                             central_metas), mode='concat'))
 
     predictions_center = Dense(num_dense, activation='relu')(predictions_center)
+    # dropout center
+    predictions_center = Dropout(0.2)(predictions_center)
     predictions_center = Dense(num_dense, activation='relu')(predictions_center)
 
     # dropout
-    predictions_left = Dropout(0.2)(predictions_left)
-    predictions_right = Dropout(0.2)(predictions_right)
-    predictions_center = Dropout(0.2)(predictions_center)
 
     return_sequences = True
     for k, stack_index in enumerate(range(len(num_units_lstm))):
@@ -223,13 +222,15 @@ def skip(num_features_lr, num_features_c, num_features_meta, num_pitches, num_un
     predictions_right_old = Lambda(lambda t: t[:, -1, :],
                                    output_shape=lambda input_shape: (input_shape[0], input_shape[-1],)
                                    )(predictions_right_old)
-    # concat or sum
-    predictions_left = merge([Activation('relu')(predictions_left), predictions_left_old], mode='concat')
-    predictions_right = merge([Activation('relu')(predictions_right), predictions_right_old], mode='concat')
+    # todo concat or sum
+    predictions_left = merge([Activation('relu')(predictions_left), predictions_left_old], mode='sum')
+    predictions_right = merge([Activation('relu')(predictions_right), predictions_right_old], mode='sum')
 
     predictions = merge([predictions_left, predictions_center, predictions_right],
                         mode='concat')
     predictions = Dense(num_dense, activation='relu')(predictions)
+    # todo dropout here ?
+    predictions = Dropout(0.2)(predictions)
     pitch_prediction = Dense(num_pitches, activation='softmax',
                              name='pitch_prediction')(predictions)
 
@@ -715,8 +716,8 @@ def main():
     print(args)
 
     # fixed set of metadatas to use when CREATING the dataset
-    # metadatas = [FermataMetadatas(), KeyMetadatas(windowSize=1), TickMetadatas(SUBDIVISION), ModeMetadatas()]
-    metadatas = [TickMetadatas(SUBDIVISION), FermataMetadatas()]
+    # metadatas = [FermataMetadatas(), KeyMetadatas(window_size=1), TickMetadatas(SUBDIVISION), ModeMetadatas()]
+    metadatas = [TickMetadatas(SUBDIVISION), FermataMetadatas(), KeyMetadatas(window_size=1)]
 
     # datasets
 
@@ -775,7 +776,7 @@ def main():
 
     if not os.path.exists('models/' + model_name + '_' + str(NUM_VOICES - 1) + '.yaml'):
         create_models(model_name, create_new=overwrite, num_units_lstm=num_units_lstm, num_dense=num_dense,
-                      pickled_dataset=pickled_dataset, num_voices=num_voices, metadatas=metadatas)
+                      pickled_dataset=pickled_dataset, num_voices=num_voices, metadatas=metadatas, timesteps=timesteps)
     if train:
         models = train_models(model_name=model_name, samples_per_epoch=samples_per_epoch, num_epochs=num_epochs,
                               nb_val_samples=nb_val_samples, timesteps=timesteps, pickled_dataset=pickled_dataset,
