@@ -29,7 +29,7 @@ F_INDEX = 2  # fermata index in representation
 
 OCTAVE = 12
 
-BACH_DATASET = 'datasets/raw_dataset/bach_dataset.pickle'
+BACH_DATASET = 'datasets/raw_dataset/bach_dataset_sop_bass.pickle'
 
 voice_ids_default = list(range(NUM_VOICES))  # soprano, alto, tenor, bass
 
@@ -610,7 +610,7 @@ def create_index_dicts(chorale_list, voice_ids=voice_ids_default):
     # create tables
     index2notes = []
     note2indexes = []
-    for voice_index in voice_ids:
+    for voice_index, _ in enumerate(voice_ids):
         l = list(voice_ranges[voice_index])
         index2note = {}
         note2index = {}
