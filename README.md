@@ -23,12 +23,13 @@ You also need to [configure properly the music editor called by music21](http://
 # Usage
 
 ```
- usage: deepBach.py [-h] [--timesteps TIMESTEPS] [-b BATCH_SIZE_TRAIN]
+usage: deepBach.py [-h] [--timesteps TIMESTEPS] [-b BATCH_SIZE_TRAIN]
                    [-s SAMPLES_PER_EPOCH] [--num_val_samples NUM_VAL_SAMPLES]
                    [-u NUM_UNITS_LSTM [NUM_UNITS_LSTM ...]] [-d NUM_DENSE]
-                   [-n {deepbach,mlp,maxent}] [-i NUM_ITERATIONS] [-t [TRAIN]]
+                   [-n {deepbach,skip}] [-i NUM_ITERATIONS] [-t [TRAIN]]
                    [-p [PARALLEL]] [--overwrite] [-m [MIDI_FILE]] [-l LENGTH]
-                   [--ext EXT]
+                   [--ext EXT] [-o [OUTPUT_FILE]] [--dataset [DATASET]]
+                   [-r [REHARMONIZATION]]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -44,7 +45,7 @@ optional arguments:
                         number of lstm units (default: [200, 200])
   -d NUM_DENSE, --num_dense NUM_DENSE
                         size of non recurrent hidden layers (default: 200)
-  -n {deepbach,mlp,maxent}, --name {deepbach,mlp,maxent}
+  -n {deepbach,skip}, --name {deepbach,skip}
                         model name (default: deepbach)
   -i NUM_ITERATIONS, --num_iterations NUM_ITERATIONS
                         number of gibbs iterations (default: 20000)
@@ -60,6 +61,11 @@ optional arguments:
   --ext EXT             extension of model name
   -o [OUTPUT_FILE], --output_file [OUTPUT_FILE]
                         path to output file
+  --dataset [DATASET]   path to dataset folder
+  -r [REHARMONIZATION], --reharmonization [REHARMONIZATION]
+                        reharmonization of a melody from the corpus identified
+                        by its id
+
 
 ```
 
@@ -101,9 +107,11 @@ Gesualdo: (BEAT_SIZE and SUBDIVISION constants set to 4)
 python3 deepBach.py -n skip  --ext ravenscroches  --dataset /home/gaetan/data/RavenscroftMidiMt -p -l 300 -i 50000
 -n skipnof  -p -i 30000  --ext ravenscroft__new --dataset /home/gaetan/data/RavenscroftMidiMt -r 1
 -n skipnof  -p -i 50000  --ext gesualdo --dataset /home/gaetan/data/Gesualdo -l 400 -t 2
--n skipnof  -p -i 20000  --ext dowland --dataset /home/gaetan/data/DowlandMidiMt
+-p  -n skip   --ext dowland_tf --dataset /home/gaetan/data/DowlandMidiMt -i 40000
 ```
 
 
 
 Default values load pre-trained DeepBach model and generate a chorale using sequential Gibbs sampling with 20000 iterations
+
+

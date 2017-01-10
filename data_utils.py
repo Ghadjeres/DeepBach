@@ -7,10 +7,11 @@ Created on 7 mars 2016
 """
 import pickle
 
+from music21.analysis.floatingKey import FloatingKeyException
 from tqdm import tqdm
 
 import numpy as np
-from music21 import corpus, converter, stream, note, duration, analysis
+from music21 import corpus, converter, stream, note, duration, analysis, interval
 
 NUM_VOICES = 4
 
@@ -30,7 +31,7 @@ OCTAVE = 12
 
 BACH_DATASET = 'datasets/raw_dataset/bach_dataset.pickle'
 
-voice_ids = list(range(NUM_VOICES))  # soprano, alto, tenor, bass
+voice_ids_default = list(range(NUM_VOICES))  # soprano, alto, tenor, bass
 
 SLUR_SYMBOL = '__'
 START_SYMBOL = 'START'
@@ -177,16 +178,16 @@ def to_fermata(time, timesteps=None):
     return fermatas_left, central_fermata, fermatas_right
 
 
-def chorale_to_inputs(chorale, num_voices, index2notes, note2indexes):
+def chorale_to_inputs(chorale, voice_ids, index2notes, note2indexes):
     """
     :param chorale: music21 chorale
-    :param num_voices:
+    :param voice_ids:
     :param index2notes:
     :param note2indexes:
     :return: (num_voices, time) matrix of indexes
     """
     inputs = []
-    for voice_index in range(num_voices):
+    for voice_index in voice_ids:
         inputs.append(part_to_inputs(chorale.parts[voice_index], index2notes[voice_index], note2indexes[voice_index]))
     return np.array(inputs)
 
@@ -255,10 +256,10 @@ def _min_max_midi_pitch(note_strings):
     return min_pitch, max_pitch
 
 
-def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, metadatas=None):
+def make_dataset(chorale_list, dataset_name, voice_ids=voice_ids_default, transpose=False, metadatas=None):
     X = []
     X_metadatas = []
-    index2notes, note2indexes = create_index_dicts(chorale_list, num_voices=num_voices)
+    index2notes, note2indexes = create_index_dicts(chorale_list, voice_ids=voice_ids)
 
     # todo clean this part
     min_max_midi_pitches = np.array(list(map(lambda d: _min_max_midi_pitch(d.values()), index2notes)))
@@ -275,8 +276,9 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, meta
                 max_transposition = min(max_midi_pitches - max_midi_pitches_current)
                 for t in range(min_transposition, max_transposition + 1):
                     try:
-                        chorale_tranposed = chorale.transpose(t)
-                        inputs = chorale_to_inputs(chorale_tranposed, num_voices=num_voices, index2notes=index2notes,
+                        transposition_interval = interval.Interval(t)
+                        chorale_tranposed = chorale.transpose(transposition_interval)
+                        inputs = chorale_to_inputs(chorale_tranposed, voice_ids=voice_ids, index2notes=index2notes,
                                                    note2indexes=note2indexes
                                                    )
                         md = []
@@ -291,9 +293,11 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, meta
                         X_metadatas.append(md)
                     except KeyError:
                         pass
+                    except FloatingKeyException:
+                        print('FloatingKeyException: File ' + chorale_file + ' skipped')
             else:
                 print("Warning: no transposition! shouldn't be used!")
-                inputs = chorale_to_inputs(chorale, num_voices=num_voices,
+                inputs = chorale_to_inputs(chorale, voice_ids=voice_ids,
                                            index2notes=index2notes,
                                            note2indexes=note2indexes)
                 X.append(inputs)
@@ -301,7 +305,7 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, meta
         except (AttributeError, IndexError):
             pass
 
-    dataset = (X, X_metadatas, num_voices, index2notes, note2indexes, metadatas)
+    dataset = (X, X_metadatas, voice_ids, index2notes, note2indexes, metadatas)
     pickle.dump(dataset, open(dataset_name, 'wb'), pickle.HIGHEST_PROTOCOL)
     print(str(len(X)) + ' files written in ' + dataset_name)
 
@@ -579,18 +583,18 @@ def indexed_chorale_to_score(seq, pickled_dataset):
     return score
 
 
-def create_index_dicts(chorale_list, num_voices=4):
+def create_index_dicts(chorale_list, voice_ids=voice_ids_default):
     """
     Returns two lists (index2notes, note2indexes) of size num_voices containing dictionaries
     :param chorale_list:
-    :param num_voices:
+    :param voice_ids:
     :param min_pitches:
     :param max_pitches:
     :return:
     """
     # store all notes
     voice_ranges = []
-    for voice_index in range(num_voices):
+    for voice_index in voice_ids:
         voice_range = set()
         for chorale_path in chorale_list:
             # todo transposition
@@ -606,7 +610,7 @@ def create_index_dicts(chorale_list, num_voices=4):
     # create tables
     index2notes = []
     note2indexes = []
-    for voice_index in range(num_voices):
+    for voice_index in voice_ids:
         l = list(voice_ranges[voice_index])
         index2note = {}
         note2index = {}
@@ -618,7 +622,7 @@ def create_index_dicts(chorale_list, num_voices=4):
     return index2notes, note2indexes
 
 
-def initialization(dataset_path=None, metadatas=None):
+def initialization(dataset_path=None, metadatas=None, voice_ids=voice_ids_default):
     from glob import glob
     print('Creating dataset')
     if dataset_path:
@@ -633,7 +637,7 @@ def initialization(dataset_path=None, metadatas=None):
     min_pitches, max_pitches = compute_min_max_pitches(chorale_list, voices=voice_ids)
 
     make_dataset(chorale_list, pickled_dataset,
-                 num_voices=len(voice_ids),
+                 voice_ids=voice_ids,
                  transpose=True,
                  metadatas=metadatas)
 
@@ -648,18 +652,31 @@ def split_note(n, max_length):
     if n.duration.quarterLength > max_length:
         l = []
         o = n.offset
-        while o < n.offset + max_length:
+        start = n.offset
+        end = n.offset + n.duration.quarterLength
+
+        while o < n.offset + n.duration.quarterLength:
             # new note
             f = standard_note(standard_name(n))
-            new_length = max_length - o % max_length
+            if o + max_length:
+                # todo tout est faux !
+                new_length = max_length - o % max_length
             f.duration.quarterLength = (new_length)
             l.append(f)
-            o = new_length
+            o += new_length
     else:
         return [n]
 
 
+def split_part(part, max_length, part_index=-1):
+    new_part = stream.Part(id='part' + str(part_index))
+    for n in part.notesAndRests:
+        for new_note in split_note(n, max_length):
+            new_part.append(new_note)
+    return new_part
+
+
 if __name__ == '__main__':
     num_voices = 4
-    make_dataset(None, BACH_DATASET, num_voices=4, transpose=False)
+    make_dataset(None, BACH_DATASET, voice_ids=4, transpose=False)
     exit()

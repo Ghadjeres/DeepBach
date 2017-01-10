@@ -190,6 +190,7 @@ chorale_metas = X_metadatas[199]
 
 @app.route('/compose', methods=['POST'])
 def compose():
+    global models
     # --- Parse request---
     with tempfile.NamedTemporaryFile(mode='w', suffix='.xml') as file:
         print(file.name)
@@ -200,19 +201,17 @@ def compose():
         # load chorale with music21
         input_chorale = converter.parse(file.name)
         input_chorale = chorale_to_inputs(input_chorale,
-                                          num_voices=num_voices,
+                                          voice_ids=num_voices,
                                           index2notes=index2notes,
                                           note2indexes=note2indexes
                                           )
         # make chorale time major
         input_chorale = np.transpose(input_chorale, axes=(1, 0))
-
         NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE = 120
         start_tick_selection = float(request.form['start_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE
         end_tick_selection = float(request.form['end_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE
         start_voice_index = int(request.form['start_staff'])
         end_voice_index = int(request.form['end_staff'])
-
         # if no selection
         if start_tick_selection == 0 and end_tick_selection == 0:
             chorale_length = input_chorale.shape[0]
@@ -269,17 +268,23 @@ def test_generation():
 
 @app.route('/models', methods=['GET'])
 def models():
-    # for test
+    global models_list
+    # recompute model names present in folder models/
+    models_list = glob('models/*.yaml')
+    models_list = list(set(map(lambda name: '_'.join(name.split('_')[:-1]).split('/')[-1], models_list)))
     return jsonify(models_list)
 
 
 @app.route('/current_model', methods=['POST', 'PUT'])
 def current_model_update():
+    global model_name
+    global models
     model_name = request.form['model_name']
     models = load_models(model_base_name=model_name, num_voices=num_voices)
-    return jsonify('Model ' + model_name + ' loaded')
+    return 'Model ' + model_name + ' loaded'
 
 
 @app.route('/current_model', methods=['GET'])
 def current_model_get():
+    global model_name
     return model_name

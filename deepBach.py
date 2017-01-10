@@ -6,19 +6,13 @@ Created on 15 mars 2016
 import argparse
 import os
 import pickle
-import random
 
-import numpy as np
-from keras.engine import Input
-from keras.layers import LSTM, Dense, TimeDistributed, merge, Reshape, Lambda, Activation
-from keras.layers.core import Dropout
-from keras.models import Model
 from keras.models import model_from_json, model_from_yaml
+from models_zoo import deepBach, deepbach_skip_connections
 from music21 import midi, converter
 from tqdm import tqdm
 
-from data_utils import BEAT_SIZE, \
-    generator_from_raw_dataset, BACH_DATASET, all_features, \
+from data_utils import generator_from_raw_dataset, BACH_DATASET, all_features, \
     indexed_chorale_to_score, \
     initialization, START_SYMBOL, END_SYMBOL, part_to_inputs, \
     NUM_VOICES, all_metadatas
@@ -66,187 +60,11 @@ def generation(model_base_name, models, timesteps, melody=None, chorale_metas=No
         mf.close()
         print("File " + output_file + " written")
 
+    # display in editor
     score.show()
     return seq
 
 
-def deepBach(num_features_lr, num_features_c, num_pitches, num_features_meta, num_units_lstm=[200],
-             num_dense=200, timesteps=16):
-    """
-
-    :param num_features_lr: size of left or right features vectors
-    :param num_features_c: size of central features vectors
-    :param num_pitches: size of output
-    :param num_units_lstm: list of lstm layer sizes
-    :param num_dense:
-    :return:
-    """
-    # input
-    left_features = Input(shape=(timesteps, num_features_lr), name='left_features')
-    right_features = Input(shape=(timesteps, num_features_lr), name='right_features')
-    central_features = Input(shape=(num_features_c,), name='central_features')
-    # input metadatas
-    left_metas = Input(shape=(timesteps, num_features_meta), name='left_metas')
-    right_metas = Input(shape=(timesteps, num_features_meta), name='right_metas')
-    central_metas = Input(shape=(num_features_meta,), name='central_metas')
-
-    # embedding layer for left and right
-    embedding_left = Dense(input_dim=num_features_lr + num_features_meta,
-                           output_dim=num_dense, name='embedding_left')
-    embedding_right = Dense(input_dim=num_features_lr + num_features_meta,
-                            output_dim=num_dense, name='embedding_right')
-
-    predictions_left = TimeDistributed(embedding_left)(merge((left_features,
-                                                              left_metas),
-                                                             mode='concat'))
-    predictions_right = TimeDistributed(embedding_right)(merge((right_features,
-                                                                right_metas),
-                                                               mode='concat'))
-
-    predictions_center = merge((central_features, central_metas), mode='concat')
-
-    predictions_center = Dense(num_dense, activation='relu')(predictions_center)
-    predictions_center = Dense(num_dense, activation='relu')(predictions_center)
-
-    return_sequences = True
-    for k, stack_index in enumerate(range(len(num_units_lstm))):
-        if k == len(num_units_lstm) - 1:
-            return_sequences = False
-        predictions_left = LSTM(num_units_lstm[stack_index],
-                                return_sequences=return_sequences,
-                                name='lstm_left_' + str(stack_index)
-                                )(predictions_left)
-        predictions_right = LSTM(num_units_lstm[stack_index],
-                                 return_sequences=return_sequences,
-                                 name='lstm_right_' + str(stack_index)
-                                 )(predictions_right)
-
-    predictions = merge((predictions_left, predictions_center, predictions_right),
-                        mode='concat')
-    predictions = Dense(num_dense, activation='relu')(predictions)
-    pitch_prediction = Dense(num_pitches, activation='softmax',
-                             name='pitch_prediction')(predictions)
-
-    model = Model(input=[left_features, central_features, right_features,
-                         left_metas, central_metas, right_metas
-                         ],
-                  output=pitch_prediction)
-
-    model.compile(optimizer='adam',
-                  loss={'pitch_prediction': 'categorical_crossentropy'},
-                  metrics=['accuracy'])
-    model.summary()
-    return model
-
-
-def \
-        skip(num_features_lr, num_features_c, num_features_meta, num_pitches, num_units_lstm=[200],
-             num_dense=200, timesteps=16):
-    """
-
-    :param num_features_lr: size of left or right features vectors
-    :param num_features_c: size of central features vectors
-    :param num_pitches: size of output
-    :param num_units_lstm: list of lstm layer sizes
-    :param num_dense:
-    :return:
-    """
-    left_features = Input(shape=(timesteps, num_features_lr), name='left_features')
-    right_features = Input(shape=(timesteps, num_features_lr), name='right_features')
-    central_features = Input(shape=(num_features_c,), name='central_features')
-
-    left_metas = Input(shape=(timesteps, num_features_meta), name='left_metas')
-    right_metas = Input(shape=(timesteps, num_features_meta), name='right_metas')
-    central_metas = Input(shape=(num_features_meta,), name='central_metas')
-
-    # embedding layer for left and right
-    embedding_left = Dense(input_dim=num_features_lr + num_features_meta,
-                           output_dim=num_dense, name='embedding_left')
-    embedding_right = Dense(input_dim=num_features_lr + BEAT_SIZE + num_features_meta,
-                            output_dim=num_dense, name='embedding_right')
-
-    # dropout on inputs
-    predictions_left = Dropout(0.2)(TimeDistributed(embedding_left)(Dropout(0.2)(merge((left_features,
-                                                                           left_metas),
-                                                                          mode='concat'))))
-    predictions_right = Dropout(0.2)(TimeDistributed(embedding_right)(Dropout(0.2)(merge((right_features,
-                                                                             right_metas),
-                                                                            mode='concat'))))
-
-    predictions_center = Dropout(0.2)(merge((central_features,
-                                             central_metas), mode='concat'))
-
-    predictions_center = Dense(num_dense, activation='relu')(predictions_center)
-    # dropout center
-    predictions_center = Dropout(0.2)(predictions_center)
-    predictions_center = Dense(num_dense, activation='relu')(predictions_center)
-
-    # dropout
-
-    return_sequences = True
-    for k, stack_index in enumerate(range(len(num_units_lstm))):
-        if k == len(num_units_lstm) - 1:
-            return_sequences = False
-
-        if k > 0:
-            # todo difference between concat and sum
-            predictions_left_tmp = merge([Activation('relu')(predictions_left), predictions_left_old], mode='sum')
-            predictions_right_tmp = merge([Activation('relu')(predictions_right), predictions_right_old], mode='sum')
-        else:
-            predictions_left_tmp = predictions_left
-            predictions_right_tmp = predictions_right
-
-        predictions_left_old = predictions_left
-        predictions_right_old = predictions_right
-        predictions_left = predictions_left_tmp
-        predictions_right = predictions_right_tmp
-
-        predictions_left = LSTM(num_units_lstm[stack_index],
-                                return_sequences=return_sequences,
-                                name='lstm_left_' + str(stack_index)
-                                )(predictions_left)
-
-        predictions_right = LSTM(num_units_lstm[stack_index],
-                                 return_sequences=return_sequences,
-                                 name='lstm_right_' + str(stack_index)
-                                 )(predictions_right)
-
-        # todo dropout here?
-        predictions_left = Dropout(0.5)(predictions_left)
-        predictions_right = Dropout(0.5)(predictions_right)
-
-    # retain only last input for skip connections
-    predictions_left_old = Lambda(lambda t: t[:, -1, :],
-                                  output_shape=lambda input_shape: (input_shape[0], input_shape[-1])
-                                  )(predictions_left_old)
-    predictions_right_old = Lambda(lambda t: t[:, -1, :],
-                                   output_shape=lambda input_shape: (input_shape[0], input_shape[-1],)
-                                   )(predictions_right_old)
-    # todo concat or sum
-    predictions_left = merge([Activation('relu')(predictions_left), predictions_left_old], mode='sum')
-    predictions_right = merge([Activation('relu')(predictions_right), predictions_right_old], mode='sum')
-
-    predictions = merge([predictions_left, predictions_center, predictions_right],
-                        mode='concat')
-    predictions = Dense(num_dense, activation='relu')(predictions)
-    # todo dropout here ?
-    predictions = Dropout(0.2)(predictions)
-    pitch_prediction = Dense(num_pitches, activation='softmax',
-                             name='pitch_prediction')(predictions)
-
-    model = Model(input=[left_features, central_features, right_features,
-
-                         left_metas, right_metas, central_metas],
-                  output=pitch_prediction)
-
-    model.compile(optimizer='adam',
-                  loss={'pitch_prediction': 'categorical_crossentropy'},
-                  metrics=['accuracy'])
-    model.summary()
-    return model
-
-
-#
 # def gibbs(models=None, melody=None, fermatas_melody=None, sequence_length=50, num_iterations=1000,
 #           timesteps=16,
 #           model_base_name='models/raw_dataset/tmp/',
@@ -427,7 +245,7 @@ def parallel_gibbs(models=None, melody=None, chorale_metas=None, sequence_length
     # Main loop
     for iteration in tqdm(range(num_iterations)):
 
-        temperature = max(min_temperature, temperature * 0.999)  # Recuit
+        temperature = max(min_temperature, temperature * 0.9992)  # Recuit
         print(temperature)
 
         time_indexes = {}
@@ -559,11 +377,11 @@ def create_models(model_name=None, create_new=False, num_dense=200, num_units_ls
                              num_features_meta=left_metas.shape[-1],
                              num_dense=num_dense, num_units_lstm=num_units_lstm)
         elif 'skip' in model_name:
-            model = skip(num_features_lr=left_features.shape[-1],
-                         num_features_c=central_features.shape[-1],
-                         num_features_meta=left_metas.shape[-1],
-                         num_pitches=num_pitches[voice_index],
-                         num_dense=num_dense, num_units_lstm=num_units_lstm, timesteps=timesteps)
+            model = deepbach_skip_connections(num_features_lr=left_features.shape[-1],
+                                              num_features_c=central_features.shape[-1],
+                                              num_features_meta=left_metas.shape[-1],
+                                              num_pitches=num_pitches[voice_index],
+                                              num_dense=num_dense, num_units_lstm=num_units_lstm, timesteps=timesteps)
         else:
             raise ValueError
 
@@ -719,8 +537,12 @@ def main():
     # metadatas = [FermataMetadatas(), KeyMetadatas(window_size=1), TickMetadatas(SUBDIVISION), ModeMetadatas()]
     metadatas = [TickMetadatas(SUBDIVISION), FermataMetadatas(), KeyMetadatas(window_size=1)]
 
-    # datasets
+    if args.ext:
+        ext = '_' + args.ext
+    else:
+        ext = ''
 
+    # datasets
     # set pickled_dataset argument
     if args.dataset:
         dataset_path = args.dataset
@@ -731,7 +553,8 @@ def main():
         pickled_dataset = BACH_DATASET
     if not os.path.exists(pickled_dataset):
         initialization(dataset_path,
-                       metadatas=metadatas)
+                       metadatas=metadatas,
+                       voice_ids=[0, 3])
 
     # load dataset
     X, X_metadatas, num_voices, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset,
@@ -742,10 +565,6 @@ def main():
     samples_per_epoch = args.samples_per_epoch
     nb_val_samples = args.num_val_samples
     num_units_lstm = args.num_units_lstm
-    if args.ext:
-        ext = '_' + args.ext
-    else:
-        ext = ''
     model_name = args.name.lower() + ext
     sequence_length = args.length
     batch_size_per_voice = args.parallel
@@ -765,9 +584,16 @@ def main():
     elif args.reharmonization:
         melody = X[args.reharmonization][0, :]
         num_voices = NUM_VOICES - 1
+        chorale_metas = X_metadatas[args.reharmonization]
     else:
         num_voices = NUM_VOICES
         melody = None
+        # todo find a better way to set metadatas
+        chorale_metas = [metas[:sequence_length] for metas in X_metadatas[11]]
+        # chorale_metas = []
+        # chorale_metas.append(np.zeros((len(melody), )))
+        # chorale_metas.append(np.full((len(melody),), 8))
+
     num_iterations = args.num_iterations // batch_size_per_voice // num_voices
     parallel = batch_size_per_voice > 1
     train = args.train > 0
@@ -776,7 +602,7 @@ def main():
 
     if not os.path.exists('models/' + model_name + '_' + str(NUM_VOICES - 1) + '.yaml'):
         create_models(model_name, create_new=overwrite, num_units_lstm=num_units_lstm, num_dense=num_dense,
-                      pickled_dataset=pickled_dataset, num_voices=num_voices, metadatas=metadatas, timesteps=timesteps)
+                      pickled_dataset=pickled_dataset, num_voices=num_voices, metadatas=metadatas)
     if train:
         models = train_models(model_name=model_name, samples_per_epoch=samples_per_epoch, num_epochs=num_epochs,
                               nb_val_samples=nb_val_samples, timesteps=timesteps, pickled_dataset=pickled_dataset,
@@ -785,10 +611,6 @@ def main():
         models = load_models(model_name, num_voices=NUM_VOICES)
     temperature = 1.
     timesteps = int(models[0].input[0]._keras_shape[1])
-    chorale_metas = X_metadatas[199]
-    # chorale_metas = []
-    # chorale_metas.append(np.zeros((len(melody), )))
-    # chorale_metas.append(np.full((len(melody),), 8))
 
     seq = generation(model_base_name=model_name, models=models,
                      timesteps=timesteps,
