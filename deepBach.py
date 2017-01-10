@@ -245,7 +245,7 @@ def parallel_gibbs(models=None, melody=None, chorale_metas=None, sequence_length
     # Main loop
     for iteration in tqdm(range(num_iterations)):
 
-        temperature = max(min_temperature, temperature * 0.9992)  # Recuit
+        temperature = max(min_temperature, temperature * 0.999)  # Recuit
         print(temperature)
 
         time_indexes = {}
@@ -535,7 +535,7 @@ def main():
 
     # fixed set of metadatas to use when CREATING the dataset
     # metadatas = [FermataMetadatas(), KeyMetadatas(window_size=1), TickMetadatas(SUBDIVISION), ModeMetadatas()]
-    metadatas = [TickMetadatas(SUBDIVISION), FermataMetadatas(), KeyMetadatas(window_size=1)]
+    metadatas = [TickMetadatas(SUBDIVISION), FermataMetadatas()]
 
     if args.ext:
         ext = '_' + args.ext
@@ -553,7 +553,8 @@ def main():
         pickled_dataset = BACH_DATASET
     if not os.path.exists(pickled_dataset):
         initialization(dataset_path,
-                       metadatas=metadatas)
+                       metadatas=metadatas,
+                       voice_ids=[0, 3])
 
     # load dataset
     X, X_metadatas, num_voices, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset,

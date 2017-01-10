@@ -31,7 +31,7 @@ OCTAVE = 12
 
 BACH_DATASET = 'datasets/raw_dataset/bach_dataset.pickle'
 
-voice_ids = list(range(NUM_VOICES))  # soprano, alto, tenor, bass
+voice_ids_default = list(range(NUM_VOICES))  # soprano, alto, tenor, bass
 
 SLUR_SYMBOL = '__'
 START_SYMBOL = 'START'
@@ -178,17 +178,17 @@ def to_fermata(time, timesteps=None):
     return fermatas_left, central_fermata, fermatas_right
 
 
-def chorale_to_inputs(chorale, num_voices, index2notes, note2indexes):
+def chorale_to_inputs(chorale, voice_ids, index2notes, note2indexes):
     """
     :param chorale: music21 chorale
-    :param num_voices:
+    :param voice_ids:
     :param index2notes:
     :param note2indexes:
     :return: (num_voices, time) matrix of indexes
     """
     inputs = []
-    for voice_index in range(num_voices):
-        inputs.append(part_to_inputs(chorale.parts[voice_index], index2notes[voice_index], note2indexes[voice_index]))
+    for voice_index, voice_id in enumerate(voice_ids):
+        inputs.append(part_to_inputs(chorale.parts[voice_id], index2notes[voice_index], note2indexes[voice_index]))
     return np.array(inputs)
 
 
@@ -256,10 +256,10 @@ def _min_max_midi_pitch(note_strings):
     return min_pitch, max_pitch
 
 
-def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, metadatas=None):
+def make_dataset(chorale_list, dataset_name, voice_ids=voice_ids_default, transpose=False, metadatas=None):
     X = []
     X_metadatas = []
-    index2notes, note2indexes = create_index_dicts(chorale_list, num_voices=num_voices)
+    index2notes, note2indexes = create_index_dicts(chorale_list, voice_ids=voice_ids)
 
     # todo clean this part
     min_max_midi_pitches = np.array(list(map(lambda d: _min_max_midi_pitch(d.values()), index2notes)))
@@ -269,7 +269,7 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, meta
         try:
             chorale = converter.parse(chorale_file)
             if transpose:
-                midi_pitches = [[n.pitch.midi for n in part.flat.notes] for part in chorale.parts]
+                midi_pitches = [[n.pitch.midi for n in chorale.parts[voice_id].flat.notes] for voice_id in voice_ids]
                 min_midi_pitches_current = np.array([min(l) for l in midi_pitches])
                 max_midi_pitches_current = np.array([max(l) for l in midi_pitches])
                 min_transposition = max(min_midi_pitches - min_midi_pitches_current)
@@ -281,7 +281,7 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, meta
                         interval_type, interval_nature = interval.convertSemitoneToSpecifierGeneric(semi_tone)
                         transposition_interval = interval.Interval(str(interval_nature) + interval_type)
                         chorale_tranposed = chorale.transpose(transposition_interval)
-                        inputs = chorale_to_inputs(chorale_tranposed, num_voices=num_voices, index2notes=index2notes,
+                        inputs = chorale_to_inputs(chorale_tranposed, voice_ids=voice_ids, index2notes=index2notes,
                                                    note2indexes=note2indexes
                                                    )
                         md = []
@@ -295,12 +295,12 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, meta
                         X.append(inputs)
                         X_metadatas.append(md)
                     except KeyError:
-                        pass
+                        print('KeyError: File ' + chorale_file + ' skipped')
                     except FloatingKeyException:
                         print('FloatingKeyException: File ' + chorale_file + ' skipped')
             else:
                 print("Warning: no transposition! shouldn't be used!")
-                inputs = chorale_to_inputs(chorale, num_voices=num_voices,
+                inputs = chorale_to_inputs(chorale, voice_ids=voice_ids,
                                            index2notes=index2notes,
                                            note2indexes=note2indexes)
                 X.append(inputs)
@@ -308,7 +308,7 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, meta
         except (AttributeError, IndexError):
             pass
 
-    dataset = (X, X_metadatas, num_voices, index2notes, note2indexes, metadatas)
+    dataset = (X, X_metadatas, voice_ids, index2notes, note2indexes, metadatas)
     pickle.dump(dataset, open(dataset_name, 'wb'), pickle.HIGHEST_PROTOCOL)
     print(str(len(X)) + ' files written in ' + dataset_name)
 
@@ -401,9 +401,9 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
             where fermatas = (fermatas_left, central_fermatas, fermatas_right)
     """
 
-    X, X_metadatas, num_voices, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
+    X, X_metadatas, voice_ids, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
     num_pitches = list(map(lambda x: len(x), index2notes))
-
+    num_voices = len(voice_ids)
     # Set chorale_indices
     if phase == 'train':
         chorale_indices = np.arange(int(len(X) * percentage_train))
@@ -586,23 +586,23 @@ def indexed_chorale_to_score(seq, pickled_dataset):
     return score
 
 
-def create_index_dicts(chorale_list, num_voices=4):
+def create_index_dicts(chorale_list, voice_ids=voice_ids_default):
     """
     Returns two lists (index2notes, note2indexes) of size num_voices containing dictionaries
     :param chorale_list:
-    :param num_voices:
+    :param voice_ids:
     :param min_pitches:
     :param max_pitches:
     :return:
     """
     # store all notes
     voice_ranges = []
-    for voice_index in range(num_voices):
+    for voice_id in voice_ids:
         voice_range = set()
         for chorale_path in chorale_list:
             # todo transposition
             chorale = converter.parse(chorale_path)
-            part = chorale.parts[voice_index].flat
+            part = chorale.parts[voice_id].flat
             for n in part.notesAndRests:
                 voice_range.add(standard_name(n))
         # add additional symbols
@@ -613,7 +613,7 @@ def create_index_dicts(chorale_list, num_voices=4):
     # create tables
     index2notes = []
     note2indexes = []
-    for voice_index in range(num_voices):
+    for voice_index, _ in enumerate(voice_ids):
         l = list(voice_ranges[voice_index])
         index2note = {}
         note2index = {}
@@ -625,7 +625,7 @@ def create_index_dicts(chorale_list, num_voices=4):
     return index2notes, note2indexes
 
 
-def initialization(dataset_path=None, metadatas=None):
+def initialization(dataset_path=None, metadatas=None, voice_ids=voice_ids_default):
     from glob import glob
     print('Creating dataset')
     if dataset_path:
@@ -640,7 +640,7 @@ def initialization(dataset_path=None, metadatas=None):
     min_pitches, max_pitches = compute_min_max_pitches(chorale_list, voices=voice_ids)
 
     make_dataset(chorale_list, pickled_dataset,
-                 num_voices=len(voice_ids),
+                 voice_ids=voice_ids,
                  transpose=True,
                  metadatas=metadatas)
 
@@ -680,6 +680,5 @@ def split_part(part, max_length, part_index=-1):
 
 
 if __name__ == '__main__':
-    num_voices = 4
-    make_dataset(None, BACH_DATASET, num_voices=4, transpose=False)
+    make_dataset(None, BACH_DATASET, voice_ids=4, transpose=False)
     exit()
