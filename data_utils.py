@@ -13,7 +13,7 @@ from tqdm import tqdm
 import numpy as np
 from music21 import corpus, converter, stream, note, duration, analysis, interval
 
-NUM_VOICES = 2
+NUM_VOICES = 4
 
 SUBDIVISION = 4  # quarter note subdivision
 BEAT_SIZE = 4
@@ -29,7 +29,7 @@ F_INDEX = 2  # fermata index in representation
 
 OCTAVE = 12
 
-BACH_DATASET = 'datasets/raw_dataset/bach_dataset_sop_bass.pickle'
+BACH_DATASET = 'datasets/raw_dataset/bach_dataset.pickle'
 
 voice_ids_default = list(range(NUM_VOICES))  # soprano, alto, tenor, bass
 
