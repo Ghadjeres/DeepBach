@@ -13,7 +13,7 @@ from tqdm import tqdm
 import numpy as np
 from music21 import corpus, converter, stream, note, duration, analysis, interval
 
-NUM_VOICES = 4
+NUM_VOICES = 5
 
 SUBDIVISION = 4  # quarter note subdivision
 BEAT_SIZE = 4
@@ -188,7 +188,9 @@ def chorale_to_inputs(chorale, num_voices, index2notes, note2indexes):
     """
     inputs = []
     for voice_index in range(num_voices):
-        inputs.append(part_to_inputs(chorale.parts[voice_index], index2notes[voice_index], note2indexes[voice_index]))
+        inputs.append(part_to_inputs(chorale.parts[voice_index],
+                                     index2notes[voice_index],
+                                     note2indexes[voice_index]))
     return np.array(inputs)
 
 
@@ -278,9 +280,10 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, meta
                     try:
                         transposition_interval = interval.Interval(t)
                         chorale_tranposed = chorale.transpose(transposition_interval)
-                        inputs = chorale_to_inputs(chorale_tranposed, num_voices=num_voices, index2notes=index2notes,
-                                                   note2indexes=note2indexes
-                                                   )
+                        inputs = chorale_to_inputs(chorale_tranposed,
+                                                   num_voices=num_voices,
+                                                   index2notes=index2notes,
+                                                   note2indexes=note2indexes)
                         md = []
                         if metadatas:
                             for metadata in metadatas:
@@ -677,6 +680,18 @@ def split_part(part, max_length, part_index=-1):
 
 
 if __name__ == '__main__':
-    num_voices = 4
-    make_dataset(None, BACH_DATASET, num_voices=4, transpose=False)
+    from glob import glob
+    from metadata import *
+    num_voices = 5
+    dataset_path = '/home/music/Documents/database/Carlo Gesualdo'
+    mid_list = glob(dataset_path + '/**/*.mid')
+    xml_list = glob(dataset_path + '/**/*.xml')
+    file_list = filter_file_list(mid_list + xml_list, num_voices=num_voices)
+    pickled_path = 'datasets/custom_dataset/Carlo Gesualdo.pickle'
+
+    make_dataset(file_list,
+                 pickled_path,
+                 num_voices=num_voices,
+                 transpose=True,
+                 metadatas=metadatas)
     exit()

@@ -536,7 +536,7 @@ def main():
 
     # fixed set of metadatas to use when CREATING the dataset
     # metadatas = [FermataMetadatas(), KeyMetadatas(window_size=1), TickMetadatas(SUBDIVISION), ModeMetadatas()]
-    metadatas = [TickMetadatas(SUBDIVISION), FermataMetadatas(), KeyMetadatas(window_size=1)]
+    metadatas = [TickMetadatas(SUBDIVISION), FermataMetadatas()]
 
     if args.ext:
         ext = '_' + args.ext
@@ -557,8 +557,7 @@ def main():
                        metadatas=metadatas)
 
     # load dataset
-    X, X_metadatas, num_voices, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset,
-                                                                                        'rb'))
+    X, X_metadatas, num_voices, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
     num_pitches = list(map(len, index2notes))
     timesteps = args.timesteps
     batch_size = args.batch_size_train
@@ -578,13 +577,16 @@ def main():
     # when reharmonization
     if args.midi_file:
         melody = converter.parse(args.midi_file)
-        melody = part_to_inputs(melody.parts[0], index2note=index2notes[0], note2index=note2indexes[0])
+        melody = part_to_inputs(melody.parts[0],
+                                index2note=index2notes[0],
+                                note2index=note2indexes[0])
         num_voices = NUM_VOICES - 1
 
     elif args.reharmonization:
         melody = X[args.reharmonization][0, :]
         num_voices = NUM_VOICES - 1
         chorale_metas = X_metadatas[args.reharmonization]
+
     else:
         num_voices = NUM_VOICES
         melody = None
@@ -612,10 +614,15 @@ def main():
     temperature = 1.
     timesteps = int(models[0].input[0]._keras_shape[1])
 
-    seq = generation(model_base_name=model_name, models=models,
+    seq = generation(model_base_name=model_name,
+                     models=models,
                      timesteps=timesteps,
-                     melody=melody, initial_seq=None, temperature=temperature,
-                     chorale_metas=chorale_metas, parallel=parallel, batch_size_per_voice=batch_size_per_voice,
+                     melody=melody,
+                     initial_seq=None,
+                     temperature=temperature,
+                     chorale_metas=chorale_metas,
+                     parallel=parallel,
+                     batch_size_per_voice=batch_size_per_voice,
                      num_iterations=num_iterations,
                      sequence_length=sequence_length,
                      output_file=output_file,
