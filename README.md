@@ -105,9 +105,7 @@ Gesualdo: (BEAT_SIZE and SUBDIVISION constants set to 4)
 ```
 
 python3 deepBach.py -n skip  --ext ravenscroches  --dataset /home/gaetan/data/RavenscroftMidiMt -p -l 300 -i 50000
--n skipnof  -p -i 30000  --ext ravenscroft__new --dataset /home/gaetan/data/RavenscroftMidiMt -r 1
--n skipnof  -p -i 50000  --ext gesualdo --dataset /home/gaetan/data/Gesualdo -l 400 -t 2
--p  -n skip   --ext dowland_tf --dataset /home/gaetan/data/DowlandMidiMt -i 40000
+
 ```
 
 

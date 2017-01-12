@@ -18,7 +18,6 @@ from data_utils import generator_from_raw_dataset, BACH_DATASET, all_features, \
 from metadata import *
 
 
-
 def generation(model_base_name, models, timesteps, melody=None, chorale_metas=None,
                initial_seq=None, temperature=1.0, parallel=False, batch_size_per_voice=8, num_iterations=None,
                sequence_length=160,
@@ -353,7 +352,6 @@ def canon(models=None, chorale_metas=None, sequence_length=50, num_iterations=10
     # load dataset
     X, X_metadatas, voice_ids, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
 
-
     # variables
     num_voices = len(voice_ids)
     assert num_voices == 2
@@ -418,7 +416,6 @@ def canon(models=None, chorale_metas=None, sequence_length=50, num_iterations=10
                     # time_index = sequence_length + timesteps * 2 - time_indexes[0][batch_index]
                     time_index = time_indexes[0][batch_index] + delays[voice_index]
 
-
                 time_indexes[voice_index].append(time_index)
 
                 (left_feature,
@@ -447,7 +444,6 @@ def canon(models=None, chorale_metas=None, sequence_length=50, num_iterations=10
             # make all estimations
             probas[voice_index] = models[voice_index].predict(batch_input_features,
                                                               batch_size=batch_size_per_voice)
-
 
         # parallel updates
         for batch_index in range(batch_size_per_voice):
@@ -499,8 +495,9 @@ def _merge_probas_canon(proba_sop_split, proba_bass_split, interval, diatonic_no
                 # multiply all probas
                 for p_sop_index, p_sop in enumerate(proba_sop_split[dnn_sop]):
                     for p_bass_index, p_bass in enumerate(proba_bass_split[dnn_bass]):
-                        # multiplication
+                        # todo other combination than multiplication
                         merge_probas.append(p_sop * p_bass)
+
                         # create table or index to pitches
                         index_merge2pitches.update({index: [diatonic_note_names2indexes[SOP][dnn_sop][p_sop_index],
                                                             diatonic_note_names2indexes[BASS][dnn_bass][p_bass_index]
@@ -755,6 +752,7 @@ def main():
     print(args)
 
     # fixed set of metadatas to use when CREATING the dataset
+    # Available metadatas:
     # metadatas = [FermataMetadatas(), KeyMetadatas(window_size=1), TickMetadatas(SUBDIVISION), ModeMetadatas()]
     metadatas = [TickMetadatas(SUBDIVISION), FermataMetadatas()]
 
@@ -803,6 +801,8 @@ def main():
         melody = converter.parse(args.midi_file)
         melody = part_to_inputs(melody.parts[0], index2note=index2notes[0], note2index=note2indexes[0])
         num_voices = NUM_VOICES - 1
+        # todo find a way to specify metadatas when reharmonizing a given melody
+        chorale_metas = [metas.generate(sequence_length) for metas in metadatas]
 
     elif args.reharmonization:
         melody = X[args.reharmonization][0, :]
@@ -814,9 +814,6 @@ def main():
         # todo find a better way to set metadatas
         # chorale_metas = [metas[:sequence_length] for metas in X_metadatas[11]]
         chorale_metas = [metas.generate(sequence_length) for metas in metadatas]
-        # chorale_metas = []
-        # chorale_metas.append(np.zeros((len(melody), )))
-        # chorale_metas.append(np.full((len(melody),), 8))
 
     num_iterations = args.num_iterations // batch_size_per_voice // num_voices
     parallel = batch_size_per_voice > 1
