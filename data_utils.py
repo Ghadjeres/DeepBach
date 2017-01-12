@@ -13,23 +13,17 @@ from tqdm import tqdm
 import numpy as np
 from music21 import corpus, converter, stream, note, duration, analysis, interval
 
-NUM_VOICES = 4
+NUM_VOICES = 2
 
 SUBDIVISION = 4  # quarter note subdivision
 BEAT_SIZE = 4
 
-BITS_FERMATA = 2  # number of bits needed to encode fermata
-RANGE_FERMATA = 3  # 3 beats before fermatas
-SPACING_FERMATAS = 12  # in beats
-FERMATAS_LENGTH = 2  # in beats
-
-P_INDEX = 0  # pitch index in representation
-A_INDEX = 1  # articulation index in representation
-F_INDEX = 2  # fermata index in representation
+SOP = 0
+BASS = 1
 
 OCTAVE = 12
 
-BACH_DATASET = 'datasets/raw_dataset/bach_dataset.pickle'
+BACH_DATASET = 'datasets/raw_dataset/bach_dataset_sop_bass.pickle'
 
 voice_ids_default = list(range(NUM_VOICES))  # soprano, alto, tenor, bass
 
@@ -118,64 +112,6 @@ def to_beat(time, timesteps=None):
     right_beats = np.array(list(map(lambda x: to_onehot(x, BEAT_SIZE),
                                     np.arange(time + timesteps, time, -1) % BEAT_SIZE)))
     return left_beats, np.array(beat), right_beats
-
-
-def is_fermata(time):
-    """
-    Returns a boolean
-
-    custom function
-    :param time:
-    :return:
-    """
-    # evenly spaced fermatas
-    return (time // SUBDIVISION) % SPACING_FERMATAS < FERMATAS_LENGTH
-
-
-def fermata_melody_to_fermata(time, timesteps=None, fermatas_melody=None):
-    """
-    time is given in 16th notes
-
-    put timesteps=None only returns the current fermata
-
-    one hot encoded
-    :param time:
-    :param timesteps:
-    :return:
-    """
-    # custom formula for fermatas
-    if fermatas_melody is None:
-        print('Error in fermata_melody_to_fermata, fermatas_melody is None')
-    central_fermata = to_onehot(fermatas_melody[time], 2)
-    if timesteps is None:
-        return central_fermata
-    fermatas_left = np.array(list(map(lambda f: to_onehot(f, 2),
-                                      fermatas_melody[time - timesteps: time])))
-    fermatas_right = np.array(list(map(lambda f: to_onehot(f, 2),
-                                       fermatas_melody[time + timesteps: time: -1])))
-    return fermatas_left, central_fermata, fermatas_right
-
-
-def to_fermata(time, timesteps=None):
-    """
-    time is given in 16th notes
-
-    put timesteps=None only returns the current fermata
-
-    one hot encoded
-    :param time:
-    :param timesteps:
-    :return:
-    """
-    # custom formula for fermatas
-    central_fermata = to_onehot(is_fermata(time), 2)
-    if timesteps is None:
-        return central_fermata
-    fermatas_left = np.array(list(map(lambda f: to_onehot((is_fermata(time), 2)),
-                                      np.arange(time - timesteps, time))))
-    fermatas_right = np.array(list(map(lambda f: to_onehot((is_fermata(time), 2)),
-                                       np.arange(time + timesteps, time, -1))))
-    return fermatas_left, central_fermata, fermatas_right
 
 
 def chorale_to_inputs(chorale, voice_ids, index2notes, note2indexes):
@@ -274,7 +210,6 @@ def make_dataset(chorale_list, dataset_name, voice_ids=voice_ids_default, transp
                 max_midi_pitches_current = np.array([max(l) for l in midi_pitches])
                 min_transposition = max(min_midi_pitches - min_midi_pitches_current)
                 max_transposition = min(max_midi_pitches - max_midi_pitches_current)
-
                 for semi_tone in range(min_transposition, max_transposition + 1):
                     try:
                         # necessary, won't transpose correctly otherwise
