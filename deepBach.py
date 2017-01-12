@@ -27,13 +27,12 @@ def generation(model_base_name, models, timesteps, melody=None, chorale_metas=No
     # todo -p parameter
     parallel = True
     if parallel:
-        seq = canon(models=models, model_base_name=model_base_name,
-                    chorale_metas=chorale_metas, timesteps=timesteps,
-                    num_iterations=num_iterations, sequence_length=sequence_length,
-                    temperature=temperature,
-                    batch_size_per_voice=batch_size_per_voice,
-                    pickled_dataset=pickled_dataset)
-
+        seq = parallel_gibbs(models=models, model_base_name=model_base_name,
+                             melody=melody, chorale_metas=chorale_metas, timesteps=timesteps,
+                             num_iterations=num_iterations, sequence_length=sequence_length,
+                             temperature=temperature,
+                             initial_seq=initial_seq, batch_size_per_voice=batch_size_per_voice,
+                             parallel_updates=True, pickled_dataset=pickled_dataset)
     else:
         # todo refactor
         print('gibbs function must be refactored!')
@@ -824,7 +823,7 @@ def main():
 
     if not os.path.exists('models/' + model_name + '_' + str(NUM_VOICES - 1) + '.yaml'):
         create_models(model_name, create_new=overwrite, num_units_lstm=num_units_lstm, num_dense=num_dense,
-                      pickled_dataset=pickled_dataset, num_voices=num_voices, metadatas=metadatas)
+                      pickled_dataset=pickled_dataset, num_voices=num_voices, metadatas=metadatas, timesteps=timesteps)
     if train:
         models = train_models(model_name=model_name, samples_per_epoch=samples_per_epoch, num_epochs=num_epochs,
                               nb_val_samples=nb_val_samples, timesteps=timesteps, pickled_dataset=pickled_dataset,
