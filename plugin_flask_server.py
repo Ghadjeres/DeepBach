@@ -78,11 +78,11 @@ def parallel_gibbs_server(models=None,
     for iteration in tqdm(range(num_iterations)):
 
         temperature = max(min_temperature, temperature * discount_factor)  # Simulated annealing
-        print(temperature)
 
         time_indexes = {}
         probas = {}
         for voice_index in range(start_voice_index, end_voice_index + 1):
+
             batch_input_features = []
 
             time_indexes[voice_index] = []
@@ -162,8 +162,9 @@ if not os.path.exists(pickled_dataset):
     raise NotImplementedError
 
 # load dataset
-X, X_metadatas, num_voices, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
+X, X_metadatas, voice_ids, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
 
+num_voices = len(voice_ids)
 num_pitches = list(map(len, index2notes))
 
 # get model names present in folder models/
@@ -180,8 +181,7 @@ temperature = 1.
 timesteps = int(models[0].input[0]._keras_shape[1])
 
 # todo set metadatas from score
-chorale_metas = X_metadatas[199]
-
+chorale_metas = X_metadatas[11]
 
 # chorale_metas = []
 # chorale_metas.append(np.zeros((len(melody), )))
@@ -190,7 +190,7 @@ chorale_metas = X_metadatas[199]
 
 @app.route('/compose', methods=['POST'])
 def compose():
-    global models
+    # global models
     # --- Parse request---
     with tempfile.NamedTemporaryFile(mode='w', suffix='.xml') as file:
         print(file.name)
@@ -201,7 +201,7 @@ def compose():
         # load chorale with music21
         input_chorale = converter.parse(file.name)
         input_chorale = chorale_to_inputs(input_chorale,
-                                          voice_ids=num_voices,
+                                          voice_ids=voice_ids,
                                           index2notes=index2notes,
                                           note2indexes=note2indexes
                                           )

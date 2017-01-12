@@ -344,6 +344,8 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
         chorale_indices = np.arange(int(len(X) * percentage_train))
     if phase == 'test':
         chorale_indices = np.arange(int(len(X) * percentage_train), len(X))
+    if phase == 'all':
+        chorale_indices = np.arange(int(len(X)))
 
     left_features = []
     right_features = []

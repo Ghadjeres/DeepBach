@@ -188,9 +188,9 @@ def parallel_gibbs(models=None, melody=None, chorale_metas=None, sequence_length
     samples from models in model_base_name
     """
 
-    X, X_metadatas, num_voices, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
+    X, X_metadatas, voices_ids, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
     num_pitches = list(map(len, index2notes))
-
+    num_voices = len(voices_ids)
     # load models if not
     if models is None:
         for expert_index in range(num_voices):
@@ -653,7 +653,7 @@ def train_models(model_name, samples_per_epoch, num_epochs, nb_val_samples, time
 
                            in generator_from_raw_dataset(batch_size=batch_size, timesteps=timesteps,
                                                          voice_index=voice_index,
-                                                         phase='train',
+                                                         phase='all',
                                                          pickled_dataset=pickled_dataset
                                                          ))
 
@@ -754,7 +754,7 @@ def main():
     # fixed set of metadatas to use when CREATING the dataset
     # Available metadatas:
     # metadatas = [FermataMetadatas(), KeyMetadatas(window_size=1), TickMetadatas(SUBDIVISION), ModeMetadatas()]
-    metadatas = [TickMetadatas(SUBDIVISION), FermataMetadatas()]
+    metadatas = [TickMetadatas(SUBDIVISION), FermataMetadatas(), KeyMetadatas(window_size=1)]
 
     if args.ext:
         ext = '_' + args.ext
@@ -773,7 +773,7 @@ def main():
     if not os.path.exists(pickled_dataset):
         initialization(dataset_path,
                        metadatas=metadatas,
-                       voice_ids=[0, 3])
+                       voice_ids=[0, 1, 2, 3])
 
     # load dataset
     X, X_metadatas, voice_ids, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset,
@@ -812,6 +812,7 @@ def main():
         num_voices = NUM_VOICES
         melody = None
         # todo find a better way to set metadatas
+
         # chorale_metas = [metas[:sequence_length] for metas in X_metadatas[11]]
         chorale_metas = [metas.generate(sequence_length) for metas in metadatas]
 
