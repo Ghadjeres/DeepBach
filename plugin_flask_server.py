@@ -45,6 +45,9 @@ def parallel_gibbs_server(models=None,
     assert models is not None
     assert input_chorale is not None
 
+    print(models)
+    print(type(models))
+
     sequence_length = len(input_chorale[:, 0])
     # init
     seq = np.zeros(shape=(2 * timesteps + sequence_length, num_voices))
@@ -134,7 +137,7 @@ def parallel_gibbs_server(models=None,
 
         if parallel_updates:
             # update
-            for voice_index in range(start_voice_index, end_voice_index):
+            for voice_index in range(start_voice_index, end_voice_index + 1):
                 for batch_index in range(batch_size_per_voice):
                     probas_pitch = probas[voice_index][batch_index]
 
@@ -171,7 +174,7 @@ num_pitches = list(map(len, index2notes))
 models_list = glob('models/*.yaml')
 models_list = list(set(map(lambda name: '_'.join(name.split('_')[:-1]).split('/')[-1], models_list)))
 
-model_name = 'skip_tfk'
+model_name = 'skip_tfk_big'
 assert os.path.exists('models/' + model_name + '_' + str(num_voices - 1) + '.yaml')
 
 # load models
@@ -179,13 +182,6 @@ models = load_models(model_name, num_voices=num_voices)
 
 temperature = 1.
 timesteps = int(models[0].input[0]._keras_shape[1])
-
-# todo set metadatas from score
-chorale_metas = X_metadatas[11]
-
-# chorale_metas = []
-# chorale_metas.append(np.zeros((len(melody), )))
-# chorale_metas.append(np.full((len(melody),), 8))
 
 
 @app.route('/compose', methods=['POST'])
@@ -205,6 +201,15 @@ def compose():
                                           index2notes=index2notes,
                                           note2indexes=note2indexes
                                           )
+
+        sequence_length = input_chorale.shape[-1]
+        # generate metadata:
+        # todo find a way to set metadata from musescore
+        # you may choose a given chorale:
+        # chorale_metas = X_metadatas[11]
+        # or just generate them
+        chorale_metas = [metas.generate(sequence_length) for metas in metadatas]
+
         # make chorale time major
         input_chorale = np.transpose(input_chorale, axes=(1, 0))
         NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE = 120
@@ -280,6 +285,9 @@ def current_model_update():
     global model_name
     global models
     model_name = request.form['model_name']
+    # todo to remove this statement
+    if model_name == 'undefined':
+        return ''
     models = load_models(model_base_name=model_name, num_voices=num_voices)
     return 'Model ' + model_name + ' loaded'
 
