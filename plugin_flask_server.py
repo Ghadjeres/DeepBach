@@ -174,7 +174,7 @@ num_pitches = list(map(len, index2notes))
 models_list = glob('models/*.yaml')
 models_list = list(set(map(lambda name: '_'.join(name.split('_')[:-1]).split('/')[-1], models_list)))
 
-model_name = 'skip_tfk_big'
+model_name = 'deepbach'
 assert os.path.exists('models/' + model_name + '_' + str(num_voices - 1) + '.yaml')
 
 # load models
