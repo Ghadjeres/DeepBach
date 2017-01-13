@@ -87,3 +87,7 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+# local files
+/stats/
+/datasets/Oll.xml
