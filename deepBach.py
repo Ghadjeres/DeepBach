@@ -671,7 +671,7 @@ def train_models(model_name, samples_per_epoch, num_epochs, nb_val_samples, time
 
                          in generator_from_raw_dataset(batch_size=batch_size, timesteps=timesteps,
                                                        voice_index=voice_index,
-                                                       phase='val',
+                                                       phase='test',
                                                        pickled_dataset=pickled_dataset
                                                        ))
 
