@@ -288,8 +288,11 @@ def all_features(chorale, voice_index, time_index, timesteps, num_pitches, num_v
 
     right_feature = chorale_to_onehot(chorale[time_index + timesteps: time_index: -1, :], num_pitches=num_pitches)
 
-    central_feature = time_slice_to_onehot(chorale[time_index, mask],
-                                           num_pitches[mask])
+    if num_voices > 1:
+        central_feature = time_slice_to_onehot(chorale[time_index, mask],
+                                               num_pitches[mask])
+    else:
+        central_feature = []
 
     # put timesteps=None to only have the current beat
     # beat is now considered as a metadata
@@ -562,7 +565,7 @@ def create_index_dicts(chorale_list, voice_ids=voice_ids_default):
     return index2notes, note2indexes
 
 
-def initialization(dataset_path=None, metadatas=None, voice_ids=voice_ids_default):
+def initialization(dataset_path=None, metadatas=None, voice_ids=voice_ids_default, BACH_DATASET=BACH_DATASET):
     from glob import glob
     print('Creating dataset')
     if dataset_path:
