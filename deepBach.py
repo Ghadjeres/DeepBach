@@ -19,21 +19,34 @@ from data_utils import generator_from_raw_dataset, BACH_DATASET, all_features, \
 from metadata import *
 
 
-def generation(model_base_name, models, timesteps, melody=None, chorale_metas=None,
-               initial_seq=None, temperature=1.0, parallel=False, batch_size_per_voice=8, num_iterations=None,
+def generation(model_base_name, models, timesteps,
+               melody=None,
+               chorale_metas=None,
+               initial_seq=None,
+               temperature=1.0,
+               parallel=False,
+               batch_size_per_voice=8,
+               num_iterations=None,
                sequence_length=160,
-               output_file=None, pickled_dataset=BACH_DATASET):
+               output_file=None,
+               pickled_dataset=BACH_DATASET):
     # Test by generating a sequence
 
     # todo -p parameter
     parallel = True
     if parallel:
-        seq = parallel_gibbs(models=models, model_base_name=model_base_name,
-                             melody=melody, chorale_metas=chorale_metas, timesteps=timesteps,
-                             num_iterations=num_iterations, sequence_length=sequence_length,
+        seq = parallel_gibbs(models=models,
+                             model_base_name=model_base_name,
+                             melody=melody,
+                             chorale_metas=chorale_metas,
+                             timesteps=timesteps,
+                             num_iterations=num_iterations,
+                             sequence_length=sequence_length,
                              temperature=temperature,
-                             initial_seq=initial_seq, batch_size_per_voice=batch_size_per_voice,
-                             parallel_updates=True, pickled_dataset=pickled_dataset)
+                             initial_seq=initial_seq,
+                             batch_size_per_voice=batch_size_per_voice,
+                             parallel_updates=True,
+                             pickled_dataset=pickled_dataset)
 
     else:
         # todo refactor
@@ -48,9 +61,7 @@ def generation(model_base_name, models, timesteps, melody=None, chorale_metas=No
         raise NotImplementedError
 
     # convert
-    score = indexed_chorale_to_score(np.transpose(seq, axes=(1, 0)),
-                                     pickled_dataset=pickled_dataset
-                                     )
+    score = indexed_chorale_to_score(np.transpose(seq, axes=(1, 0)), pickled_dataset=pickled_dataset)
 
     # save as MIDI file
     if output_file:
@@ -181,10 +192,17 @@ def generation(model_base_name, models, timesteps, melody=None, chorale_metas=No
 #     return seq[timesteps:-timesteps, :]
 
 
-def parallel_gibbs(models=None, melody=None, chorale_metas=None, sequence_length=50, num_iterations=1000,
+def parallel_gibbs(models=None,
+                   melody=None,
+                   chorale_metas=None,
+                   sequence_length=50,
+                   num_iterations=1000,
                    timesteps=16,
                    model_base_name='models/raw_dataset/tmp/',
-                   temperature=1., initial_seq=None, batch_size_per_voice=16, parallel_updates=True,
+                   temperature=1.,
+                   initial_seq=None,
+                   batch_size_per_voice=16,
+                   parallel_updates=True,
                    pickled_dataset=BACH_DATASET):
     """
     samples from models in model_base_name
@@ -247,7 +265,7 @@ def parallel_gibbs(models=None, melody=None, chorale_metas=None, sequence_length
     for iteration in tqdm(range(num_iterations)):
 
         temperature = max(min_temperature, temperature * 0.9992)  # Recuit
-        print(temperature)
+        # print(temperature)
 
         time_indexes = {}
         probas = {}
@@ -267,7 +285,8 @@ def parallel_gibbs(models=None, melody=None, chorale_metas=None, sequence_length
 
                 left_metas, central_metas, right_metas = all_metadatas(chorale_metadatas=extended_chorale_metas,
                                                                        metadatas=metadatas,
-                                                                       time_index=time_index, timesteps=timesteps)
+                                                                       time_index=time_index,
+                                                                       timesteps=timesteps)
 
                 input_features = {'left_features': left_feature[:, :],
                                   'central_features': central_feature[:],
@@ -376,13 +395,18 @@ def create_models(model_name=None, create_new=False, num_dense=200, num_units_ls
                              num_features_c=central_features.shape[-1],
                              num_pitches=num_pitches[voice_index],
                              num_features_meta=left_metas.shape[-1],
-                             num_dense=num_dense, num_units_lstm=num_units_lstm)
+                             num_dense=num_dense,
+                             num_units_lstm=num_units_lstm)
+
         elif 'skip' in model_name:
             model = deepbach_skip_connections(num_features_lr=left_features.shape[-1],
                                               num_features_c=central_features.shape[-1],
                                               num_features_meta=left_metas.shape[-1],
                                               num_pitches=num_pitches[voice_index],
-                                              num_dense=num_dense, num_units_lstm=num_units_lstm, timesteps=timesteps)
+                                              num_dense=num_dense,
+                                              num_units_lstm=num_units_lstm,
+                                              timesteps=timesteps)
+
         else:
             raise ValueError
 
@@ -402,15 +426,22 @@ def load_models(model_base_name=None, num_voices=4):
     for voice_index in range(num_voices):
         model_path_name = 'models/' + model_base_name + '_' + str(voice_index)
         model = load_model(model_path_name)
-        model.compile(optimizer='adam', loss={'pitch_prediction': 'categorical_crossentropy'
-                                              },
+        model.compile(optimizer='adam',
+                      loss={'pitch_prediction': 'categorical_crossentropy'},
                       metrics=['accuracy'])
         models.append(model)
     return models
 
 
-def train_models(model_name, samples_per_epoch, num_epochs, nb_val_samples, timesteps, pickled_dataset=BACH_DATASET,
-                 num_voices=4, batch_size=16, metadatas=None):
+def train_models(model_name,
+                 samples_per_epoch,
+                 num_epochs,
+                 nb_val_samples,
+                 timesteps,
+                 pickled_dataset=BACH_DATASET,
+                 num_voices=4,
+                 batch_size=16,
+                 metadatas=None):
     """
     Train models
     :param batch_size:
@@ -478,7 +509,11 @@ def train_models(model_name, samples_per_epoch, num_epochs, nb_val_samples, time
 
 
 def main():
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # parse arguments
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--timesteps', help="model's range (default: %(default)s)",
                         type=int, default=16)
@@ -534,30 +569,38 @@ def main():
     args = parser.parse_args()
     print(args)
 
-    # fixed set of metadatas to use when CREATING the dataset
-    # metadatas = [FermataMetadatas(), KeyMetadatas(window_size=1), TickMetadatas(SUBDIVISION), ModeMetadatas()]
-    metadatas = [TickMetadatas(SUBDIVISION), FermataMetadatas()]
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # Datasets
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    # - - - - Chorals
+
+    # set pickled_dataset argument
+    if args.dataset:
+        dataset_path = args.dataset
+        dataset_name = dataset_path.split('/')[-1]
+        pickled_dataset = 'datasets/custom_dataset/' + dataset_name + '.pickle'
+        pickled_track_list = 'datasets/custom_dataset/' + dataset_name + ' tracks.pickle'
+    else:
+        dataset_path = None
+        pickled_dataset = BACH_DATASET
+    if not os.path.exists(pickled_dataset):
+        # fixed set of metadatas to use when CREATING the dataset
+        metadatas = [TickMetadatas(SUBDIVISION), FermataMetadatas(), ModeMetadatas()]
+        initialization(dataset_path, metadatas=metadatas)
+
+    # - - - - load dataset
+    X, X_metadatas, num_voices, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # Parameters
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     if args.ext:
         ext = '_' + args.ext
     else:
         ext = ''
 
-    # datasets
-    # set pickled_dataset argument
-    if args.dataset:
-        dataset_path = args.dataset
-        dataset_name = dataset_path.split('/')[-1]
-        pickled_dataset = 'datasets/custom_dataset/' + dataset_name + '.pickle'
-    else:
-        dataset_path = None
-        pickled_dataset = BACH_DATASET
-    if not os.path.exists(pickled_dataset):
-        initialization(dataset_path,
-                       metadatas=metadatas)
-
-    # load dataset
-    X, X_metadatas, num_voices, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
     num_pitches = list(map(len, index2notes))
     timesteps = args.timesteps
     batch_size = args.batch_size_train
@@ -586,6 +629,11 @@ def main():
         melody = X[args.reharmonization][0, :]
         num_voices = NUM_VOICES - 1
         chorale_metas = X_metadatas[args.reharmonization]
+        if os.path.exists(pickled_track_list):
+            track_list = pickle.load(open(pickled_track_list, 'rb'))
+            curr_file = track_list[args.reharmonization]
+            print("Reharmonizing file '" + curr_file['path'] + "' ",
+                  "with transposition", curr_file['transpose'])
 
     else:
         num_voices = NUM_VOICES
@@ -602,15 +650,36 @@ def main():
     num_epochs = args.train
     overwrite = args.overwrite
 
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # Models
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
     if not os.path.exists('models/' + model_name + '_' + str(NUM_VOICES - 1) + '.yaml'):
-        create_models(model_name, create_new=overwrite, num_units_lstm=num_units_lstm, num_dense=num_dense,
-                      pickled_dataset=pickled_dataset, num_voices=num_voices, metadatas=metadatas)
+        create_models(model_name,
+                      create_new=overwrite,
+                      timesteps=timesteps,
+                      num_units_lstm=num_units_lstm,
+                      num_dense=num_dense,
+                      pickled_dataset=pickled_dataset,
+                      num_voices=num_voices,
+                      metadatas=metadatas)
     if train:
-        models = train_models(model_name=model_name, samples_per_epoch=samples_per_epoch, num_epochs=num_epochs,
-                              nb_val_samples=nb_val_samples, timesteps=timesteps, pickled_dataset=pickled_dataset,
-                              num_voices=NUM_VOICES, metadatas=metadatas, batch_size=batch_size)
+        models = train_models(model_name=model_name,
+                              samples_per_epoch=samples_per_epoch,
+                              num_epochs=num_epochs,
+                              nb_val_samples=nb_val_samples,
+                              timesteps=timesteps,
+                              pickled_dataset=pickled_dataset,
+                              num_voices=NUM_VOICES,
+                              metadatas=metadatas,
+                              batch_size=batch_size)
     else:
         models = load_models(model_name, num_voices=NUM_VOICES)
+
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    # Generation
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
     temperature = 1.
     timesteps = int(models[0].input[0]._keras_shape[1])
 

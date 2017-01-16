@@ -2,7 +2,7 @@
 Metadata classes
 """
 from data_utils import SUBDIVISION
-from music21 import analysis
+from music21 import analysis, note
 import numpy as np
 
 
@@ -28,10 +28,110 @@ class Metadata:
         raise NotImplementedError
 
 
-# todo BeatMetadata class
 # todo add strong/weak beat metadata
 # todo add minor/major metadata
+
+# todo BeatMetadata class
+class BeatMetadata(Metadata):
+    def __init__(self):
+        raise NotImplementedError
+
+    def get_index(self, value):
+        # trick with the 0 value
+        raise NotImplementedError
+
+    def get_value(self, index):
+        raise NotImplementedError
+
+    def evaluate(self, chorale):
+        """
+        takes a music21 chorale as input
+        """
+        raise NotImplementedError
+
+    def generate(self, length):
+        raise NotImplementedError
+
+
 # todo add voice_i_playing metadata
+class VoiceIPlaying(Metadata):
+    def __init__(self, window_size):
+        """ Initiate the VoiceIPlaying metadata.
+        Voice I is considered to be muted if more than 'window_size' contiguous subdivisions that contains a rest.
+
+        :param window_size: (int) number of subdivision
+        """
+        self.window_size = window_size
+        self.is_global = False
+        self.num_values = 2
+
+    def get_index(self, value):
+        # trick with the 0 value
+        if value == 'Rest':
+            return 0
+        elif value == 'NotRest':
+            return 1
+        else:
+            raise NotImplementedError
+
+    def get_value(self, index):
+        if index == 0:
+            return 'Rest'
+        elif index == 1:
+            return 'NotRest'
+        else:
+            raise ValueError
+
+    def evaluate(self, chorale):
+        """
+        takes a music21 chorale as input
+        """
+        num_voices = len(chorale.parts)
+        length = int(chorale.duration.quarterLength * SUBDIVISION)
+        is_playing = np.ones(shape=(length, num_voices))
+        for voice_index in range(num_voices):
+            current_part = chorale[voice_index].flat.getElementsByClass(note.GeneralNote).stream()
+            curr_status = 'Rest'
+            deb_time = 0.0
+            fin_time = 0.0
+            if not current_part:
+                pass
+            else:
+                fin_time = current_part[0].offset
+                for event in current_part:
+                    if curr_status == 'Rest':
+                        if event.isRest:
+                            fin_time = event.offset + event.quarterLength
+                        else:
+                            deb_index = int(deb_time * SUBDIVISION)
+                            fin_index = int(fin_time * SUBDIVISION)
+                            if fin_index - deb_index > self.window_size:
+                                is_playing[deb_index:fin_index, voice_index] = 0
+                            else:
+                                pass
+                            deb_time = event.offset
+                            fin_time = deb_time + event.quarterLength
+                            curr_status = 'NotRest'
+                    elif curr_status == 'NotRest':
+                        deb_time = event.offset
+                        fin_time = deb_time + event.quarterLength
+                        if event.isRest:
+                            curr_status = 'Rest'
+                        else:
+                            pass
+                    else:
+                        raise ValueError
+            if curr_status == 'NotRest':
+                deb_time = fin_time
+            else:
+                pass
+            deb_index = int(deb_time * SUBDIVISION)
+            fin_index = length
+            is_playing[deb_index:fin_index, voice_index] = 0
+        return is_playing
+
+    def generate(self, length):
+        return np.zeros(shape=(length,))
 
 
 class TickMetadatas(Metadata):

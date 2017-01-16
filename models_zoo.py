@@ -4,8 +4,13 @@ from keras.engine import merge
 from keras.layers import Dense, TimeDistributed, LSTM, Dropout, Activation, Lambda
 
 
-def deepBach(num_features_lr, num_features_c, num_pitches, num_features_meta, num_units_lstm=[200],
-             num_dense=200, timesteps=16):
+def deepBach(num_features_lr,
+             num_features_c,
+             num_pitches,
+             num_features_meta,
+             num_units_lstm=[200],
+             num_dense=200,
+             timesteps=16):
     """
 
     :param num_features_lr: size of left or right features vectors
@@ -26,9 +31,11 @@ def deepBach(num_features_lr, num_features_c, num_pitches, num_features_meta, nu
 
     # embedding layer for left and right
     embedding_left = Dense(input_dim=num_features_lr + num_features_meta,
-                           output_dim=num_dense, name='embedding_left')
+                           output_dim=num_dense,
+                           name='embedding_left')
     embedding_right = Dense(input_dim=num_features_lr + num_features_meta,
-                            output_dim=num_dense, name='embedding_right')
+                            output_dim=num_dense,
+                            name='embedding_right')
 
     predictions_left = TimeDistributed(embedding_left)(merge((left_features,
                                                               left_metas),
@@ -58,12 +65,12 @@ def deepBach(num_features_lr, num_features_c, num_pitches, num_features_meta, nu
     predictions = merge((predictions_left, predictions_center, predictions_right),
                         mode='concat')
     predictions = Dense(num_dense, activation='relu')(predictions)
-    pitch_prediction = Dense(num_pitches, activation='softmax',
+    pitch_prediction = Dense(num_pitches,
+                             activation='softmax',
                              name='pitch_prediction')(predictions)
 
     model = Model(input=[left_features, central_features, right_features,
-                         left_metas, central_metas, right_metas
-                         ],
+                         left_metas, central_metas, right_metas],
                   output=pitch_prediction)
 
     model.compile(optimizer='adam',
@@ -73,8 +80,13 @@ def deepBach(num_features_lr, num_features_c, num_pitches, num_features_meta, nu
     return model
 
 
-def deepbach_skip_connections(num_features_lr, num_features_c, num_features_meta, num_pitches, num_units_lstm=[200],
-                              num_dense=200, timesteps=16):
+def deepbach_skip_connections(num_features_lr,
+                              num_features_c,
+                              num_features_meta,
+                              num_pitches,
+                              num_units_lstm=[200],
+                              num_dense=200,
+                              timesteps=16):
     """
 
     :param num_features_lr: size of left or right features vectors
@@ -104,9 +116,9 @@ def deepbach_skip_connections(num_features_lr, num_features_c, num_features_meta
     predictions_center = merge((central_features, central_metas), mode='concat')
 
     # input dropout
-    predictions_left = Dropout(0.2)(predictions_left)
-    predictions_right = Dropout(0.2)(predictions_right)
-    predictions_center = Dropout(0.2)(predictions_center)
+    predictions_left = Dropout(0.4)(predictions_left)
+    predictions_right = Dropout(0.4)(predictions_right)
+    predictions_center = Dropout(0.4)(predictions_center)
 
     # embedding
     predictions_left = TimeDistributed(embedding_left)(predictions_left)

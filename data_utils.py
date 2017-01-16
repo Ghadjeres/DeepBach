@@ -188,6 +188,10 @@ def chorale_to_inputs(chorale, num_voices, index2notes, note2indexes):
     """
     inputs = []
     for voice_index in range(num_voices):
+        print()
+        print('--'*15)
+        print('processing voice', voice_index)
+        print('--'*15)
         inputs.append(part_to_inputs(chorale.parts[voice_index],
                                      index2notes[voice_index],
                                      note2indexes[voice_index]))
@@ -203,9 +207,14 @@ def part_to_inputs(part, index2note, note2index):
     :return:
     """
     length = int(part.duration.quarterLength * SUBDIVISION)  # in 16th notes
+    print('Length in 16th notes is', length)
     list_notes = part.flat.notes
+    print('List of notes :', list_notes)
     list_note_strings = [n.nameWithOctave for n in list_notes]
+    print('List notes in string :', list_note_strings)
     num_notes = len(list_notes)
+    print('Number of notes :', num_notes)
+    print('Number of differents notes :', len(set(list_note_strings)))
     # add entries to dictionaries if not present
     # should only be called by make_dataset when transposing
     for note_name in list_note_strings:
@@ -261,13 +270,14 @@ def _min_max_midi_pitch(note_strings):
 def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, metadatas=None):
     X = []
     X_metadatas = []
+    track_list = []
     index2notes, note2indexes = create_index_dicts(chorale_list, num_voices=num_voices)
 
     # todo clean this part
     min_max_midi_pitches = np.array(list(map(lambda d: _min_max_midi_pitch(d.values()), index2notes)))
     min_midi_pitches = min_max_midi_pitches[:, 0]
     max_midi_pitches = min_max_midi_pitches[:, 1]
-    for chorale_file in tqdm(chorale_list):
+    for chorale_file in tqdm(chorale_list[:]):
         try:
             chorale = converter.parse(chorale_file)
             if transpose:
@@ -279,8 +289,8 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, meta
                 for t in range(min_transposition, max_transposition + 1):
                     try:
                         transposition_interval = interval.Interval(t)
-                        chorale_tranposed = chorale.transpose(transposition_interval)
-                        inputs = chorale_to_inputs(chorale_tranposed,
+                        chorale_transposed = chorale.transpose(transposition_interval)
+                        inputs = chorale_to_inputs(chorale_transposed,
                                                    num_voices=num_voices,
                                                    index2notes=index2notes,
                                                    note2indexes=note2indexes)
@@ -291,25 +301,36 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, meta
                                 if metadata.is_global:
                                     pass
                                 else:
-                                    md.append(metadata.evaluate(chorale_tranposed))
+                                    md.append(metadata.evaluate(chorale_transposed))
                         X.append(inputs)
                         X_metadatas.append(md)
+                        track_list.append({'path': chorale_file, 'transpose': t})
                     except KeyError:
                         pass
                     except FloatingKeyException:
                         print('FloatingKeyException: File ' + chorale_file + ' skipped')
             else:
                 print("Warning: no transposition! shouldn't be used!")
-                inputs = chorale_to_inputs(chorale, num_voices=num_voices,
+                inputs = chorale_to_inputs(chorale,
+                                           num_voices=num_voices,
                                            index2notes=index2notes,
                                            note2indexes=note2indexes)
                 X.append(inputs)
 
         except (AttributeError, IndexError):
-            pass
+            if chorale_file in chorale_list:
+                chorale_list.remove(chorale_file)
+                print('Skipping file :', chorale_file)
+            else:
+                print('Trying to remove chorale :', chorale_file)
+                print('But file is not in the chorale_list')
 
     dataset = (X, X_metadatas, num_voices, index2notes, note2indexes, metadatas)
     pickle.dump(dataset, open(dataset_name, 'wb'), pickle.HIGHEST_PROTOCOL)
+
+    track_list_path = dataset_name[:dataset_name.find('.pickle')] + ' tracks.pickle'
+    pickle.dump(track_list, open(track_list_path, 'wb'), pickle.HIGHEST_PROTOCOL)
+
     print(str(len(X)) + ' files written in ' + dataset_name)
 
 
@@ -679,15 +700,25 @@ def split_part(part, max_length, part_index=-1):
     return new_part
 
 
-if __name__ == '__main__':
+def get_gesualdo_tracks():
     from glob import glob
-    from metadata import *
+
     num_voices = 5
     dataset_path = '/home/music/Documents/database/Carlo Gesualdo'
     mid_list = glob(dataset_path + '/**/*.mid')
     xml_list = glob(dataset_path + '/**/*.xml')
     file_list = filter_file_list(mid_list + xml_list, num_voices=num_voices)
+    return file_list
+
+
+if __name__ == '__main__':
+    from glob import glob
+    from metadata import *
+
+    num_voices = 5
+    file_list = get_gesualdo_tracks()
     pickled_path = 'datasets/custom_dataset/Carlo Gesualdo.pickle'
+    metadatas = [TickMetadatas(SUBDIVISION), FermataMetadatas()]
 
     make_dataset(file_list,
                  pickled_path,
