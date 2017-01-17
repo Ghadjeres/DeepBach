@@ -70,6 +70,8 @@ def filter_file_list(file_list, num_voices=4):
         # print(k, file_name)
         if len(c.parts) == num_voices:
             l.append(file_name)
+        else:
+            print('Wrong number of voices. Skipping file : ', file_name)
     return l
 
 
@@ -188,10 +190,6 @@ def chorale_to_inputs(chorale, num_voices, index2notes, note2indexes):
     """
     inputs = []
     for voice_index in range(num_voices):
-        print()
-        print('--'*15)
-        print('processing voice', voice_index)
-        print('--'*15)
         inputs.append(part_to_inputs(chorale.parts[voice_index],
                                      index2notes[voice_index],
                                      note2indexes[voice_index]))
@@ -207,14 +205,9 @@ def part_to_inputs(part, index2note, note2index):
     :return:
     """
     length = int(part.duration.quarterLength * SUBDIVISION)  # in 16th notes
-    print('Length in 16th notes is', length)
     list_notes = part.flat.notes
-    print('List of notes :', list_notes)
     list_note_strings = [n.nameWithOctave for n in list_notes]
-    print('List notes in string :', list_note_strings)
     num_notes = len(list_notes)
-    print('Number of notes :', num_notes)
-    print('Number of differents notes :', len(set(list_note_strings)))
     # add entries to dictionaries if not present
     # should only be called by make_dataset when transposing
     for note_name in list_note_strings:
@@ -308,6 +301,8 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, meta
                     except KeyError:
                         pass
                     except FloatingKeyException:
+                        x = 1
+                        x = x+1
                         print('FloatingKeyException: File ' + chorale_file + ' skipped')
             else:
                 print("Warning: no transposition! shouldn't be used!")
@@ -423,6 +418,8 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
     """
 
     X, X_metadatas, num_voices, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
+    X_metadatas = [meta[0:4] for meta in X_metadatas]
+    metadatas = metadatas[0:4]
     num_pitches = list(map(lambda x: len(x), index2notes))
 
     # Set chorale_indices
@@ -717,8 +714,14 @@ if __name__ == '__main__':
 
     num_voices = 5
     file_list = get_gesualdo_tracks()
+    print('Number of file to be processed : ', len(file_list))
     pickled_path = 'datasets/custom_dataset/Carlo Gesualdo.pickle'
-    metadatas = [TickMetadatas(SUBDIVISION), FermataMetadatas()]
+    win_size_for_not_playing = 16
+    metadatas = [BeatMetadata(),
+                 BeatStrengthMetadata(),
+                 FermataMetadatas(),
+                 TickMetadatas(SUBDIVISION),
+                 VoiceIPlaying(win_size_for_not_playing)]
 
     make_dataset(file_list,
                  pickled_path,

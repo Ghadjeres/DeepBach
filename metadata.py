@@ -2,13 +2,16 @@
 Metadata classes
 """
 from data_utils import SUBDIVISION
-from music21 import analysis, note
+from music21 import analysis, note, meter, stream
 import numpy as np
+
+# todo add minor/major metadata
 
 
 class Metadata:
     def __init__(self):
         self.num_values = None
+        self.is_global = None
         raise NotImplementedError
 
     def get_index(self, value):
@@ -28,29 +31,80 @@ class Metadata:
         raise NotImplementedError
 
 
-# todo add strong/weak beat metadata
-# todo add minor/major metadata
+class BeatStrengthMetadata:
+    def __init__(self):
+        self.num_values = None
+        self.is_global = False
 
-# todo BeatMetadata class
+    def get_index(self, value):
+        # trick with the 0 value
+        raise NotImplementedError
+
+    def get_value(self, index):
+        raise NotImplementedError
+
+    def evaluate(self, chorale):
+        """
+        takes a music21 chorale as input
+        """
+        length = int(chorale.duration.quarterLength * SUBDIVISION)
+        rep = stream.Stream()
+        n = note.Rest()
+        n.quarterLength = 1 / SUBDIVISION
+        rep.repeatAppend(n, length)
+
+        ts_list = all_time_signatures(chorale)
+        for ts in ts_list[0]:
+            rep.insert(ts.offset, ts)
+
+        rep = [note_i.beatStrength for note_i in rep.getElementsByClass(note.Rest)]
+        self.num_values = len(set(rep))
+        return np.array(rep)
+
+    def generate(self, length):
+        s = stream.Stream()
+        n = note.Rest()
+        n.quarterLength = 1 / SUBDIVISION
+        s.timeSignature = meter.TimeSignature('4/4')
+        s.repeatAppend(n, length)
+        rep = [note_i.beatStrength for note_i in s.getElementsByClass(note.Rest)]
+        return np.array(rep)
+
+
 class BeatMetadata(Metadata):
     def __init__(self):
-        raise NotImplementedError
+        self.num_values = None
+        self.is_global = False
 
     def get_index(self, value):
         # trick with the 0 value
-        raise NotImplementedError
+        return value
 
     def get_value(self, index):
-        raise NotImplementedError
+        return index
 
     def evaluate(self, chorale):
         """
         takes a music21 chorale as input
         """
-        raise NotImplementedError
+        length = int(chorale.duration.quarterLength * SUBDIVISION)
+        ts_list = all_time_signatures(chorale)
+        rep = list(map(lambda x: int(x / SUBDIVISION), range(length)))
+        for ts in ts_list[0]:
+            deb = int(ts.offset * SUBDIVISION)
+            rep[deb:] = list(map(lambda x: int(x / SUBDIVISION), range(deb, length)))
+            rep[deb:] = list(map(lambda x: x % ts.numerator, rep[deb:]))
+        self.num_values = len(set(rep))
+        return np.array(rep)
 
     def generate(self, length):
-        raise NotImplementedError
+        """ Take 4/4 as a default signature
+
+        :param length:
+        :return:
+        """
+        rep = list(map(lambda x: int(x / SUBDIVISION) % 4, range(length)))
+        return np.array(rep)
 
 
 # todo add voice_i_playing metadata
@@ -296,3 +350,16 @@ class FermataMetadatas(Metadata):
         # fermata every 2 bars
         return np.array([1 if i % 32 > 28 else 0
                          for i in range(length)])
+
+
+def all_time_signatures(chorale):
+    num_voices = len(chorale.parts)
+    ts_list = []
+    for voice_index in range(num_voices):
+        ts_list.append(chorale[voice_index].getElementsByClass(meter.TimeSignature))
+    count = len(ts_list[0])
+    for voice_index in range(1, num_voices):
+        assert (count == len(ts_list[voice_index]))
+        for k in range(count):
+            assert ts_list[0][k].offset == ts_list[0][k].offset
+    return ts_list

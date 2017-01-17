@@ -209,6 +209,8 @@ def parallel_gibbs(models=None,
     """
 
     X, X_metadatas, num_voices, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
+    X_metadatas = [meta[0:4] for meta in X_metadatas]
+    metadatas = metadatas[0:4]
     num_pitches = list(map(len, index2notes))
 
     # load models if not
@@ -586,11 +588,17 @@ def main():
         pickled_dataset = BACH_DATASET
     if not os.path.exists(pickled_dataset):
         # fixed set of metadatas to use when CREATING the dataset
-        metadatas = [TickMetadatas(SUBDIVISION), FermataMetadatas(), ModeMetadatas()]
+        win_size_for_not_playing = args.timesteps
+        metadatas = [BeatMetadata(),
+                     BeatStrengthMetadata(),
+                     FermataMetadatas(),
+                     TickMetadatas(SUBDIVISION),
+                     VoiceIPlaying(win_size_for_not_playing)]
         initialization(dataset_path, metadatas=metadatas)
 
     # - - - - load dataset
     X, X_metadatas, num_voices, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
+    X_metadatas = [meta[0:4] for meta in X_metadatas]
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     # Parameters
@@ -639,7 +647,7 @@ def main():
         num_voices = NUM_VOICES
         melody = None
         # todo find a better way to set metadatas
-        chorale_metas = [metas[:sequence_length] for metas in X_metadatas[10]]
+        chorale_metas = [metas[:sequence_length] for metas in X_metadatas[0]]
         # chorale_metas = []
         # chorale_metas.append(np.zeros((len(melody), )))
         # chorale_metas.append(np.full((len(melody),), 8))
