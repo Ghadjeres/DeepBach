@@ -6,7 +6,7 @@ Created on 7 mars 2016
 @author: Gaetan Hadjeres
 """
 import pickle
-
+import os
 from music21.analysis.floatingKey import FloatingKeyException
 from tqdm import tqdm
 
@@ -18,20 +18,14 @@ NUM_VOICES = 5
 SUBDIVISION = 4  # quarter note subdivision
 BEAT_SIZE = 4
 
-BITS_FERMATA = 2  # number of bits needed to encode fermata
-RANGE_FERMATA = 3  # 3 beats before fermatas
-SPACING_FERMATAS = 12  # in beats
-FERMATAS_LENGTH = 2  # in beats
-
-P_INDEX = 0  # pitch index in representation
-A_INDEX = 1  # articulation index in representation
-F_INDEX = 2  # fermata index in representation
+SOP = 0
+BASS = 1
 
 OCTAVE = 12
 
 BACH_DATASET = 'datasets/raw_dataset/bach_dataset.pickle'
 
-voice_ids = list(range(NUM_VOICES))  # soprano, alto, tenor, bass
+voice_ids_default = list(range(NUM_VOICES))  # soprano, alto, tenor, bass
 
 SLUR_SYMBOL = '__'
 START_SYMBOL = 'START'
@@ -95,6 +89,7 @@ def compute_min_max_pitches(file_list, voices=[0]):
             except AttributeError:
                 to_remove.append(file_name)
     for file_name in set(to_remove):
+        print('Wrong pitches in data_utils.compute_min_max_pitches(), skipping file : ', file_name)
         file_list.remove(file_name)
     return np.array(min_p), np.array(max_p)
 
@@ -122,75 +117,17 @@ def to_beat(time, timesteps=None):
     return left_beats, np.array(beat), right_beats
 
 
-def is_fermata(time):
-    """
-    Returns a boolean
-
-    custom function
-    :param time:
-    :return:
-    """
-    # evenly spaced fermatas
-    return (time // SUBDIVISION) % SPACING_FERMATAS < FERMATAS_LENGTH
-
-
-def fermata_melody_to_fermata(time, timesteps=None, fermatas_melody=None):
-    """
-    time is given in 16th notes
-
-    put timesteps=None only returns the current fermata
-
-    one hot encoded
-    :param time:
-    :param timesteps:
-    :return:
-    """
-    # custom formula for fermatas
-    if fermatas_melody is None:
-        print('Error in fermata_melody_to_fermata, fermatas_melody is None')
-    central_fermata = to_onehot(fermatas_melody[time], 2)
-    if timesteps is None:
-        return central_fermata
-    fermatas_left = np.array(list(map(lambda f: to_onehot(f, 2),
-                                      fermatas_melody[time - timesteps: time])))
-    fermatas_right = np.array(list(map(lambda f: to_onehot(f, 2),
-                                       fermatas_melody[time + timesteps: time: -1])))
-    return fermatas_left, central_fermata, fermatas_right
-
-
-def to_fermata(time, timesteps=None):
-    """
-    time is given in 16th notes
-
-    put timesteps=None only returns the current fermata
-
-    one hot encoded
-    :param time:
-    :param timesteps:
-    :return:
-    """
-    # custom formula for fermatas
-    central_fermata = to_onehot(is_fermata(time), 2)
-    if timesteps is None:
-        return central_fermata
-    fermatas_left = np.array(list(map(lambda f: to_onehot((is_fermata(time), 2)),
-                                      np.arange(time - timesteps, time))))
-    fermatas_right = np.array(list(map(lambda f: to_onehot((is_fermata(time), 2)),
-                                       np.arange(time + timesteps, time, -1))))
-    return fermatas_left, central_fermata, fermatas_right
-
-
-def chorale_to_inputs(chorale, num_voices, index2notes, note2indexes):
+def chorale_to_inputs(chorale, voice_ids, index2notes, note2indexes):
     """
     :param chorale: music21 chorale
-    :param num_voices:
+    :param voice_ids:
     :param index2notes:
     :param note2indexes:
     :return: (num_voices, time) matrix of indexes
     """
     inputs = []
-    for voice_index in range(num_voices):
-        inputs.append(part_to_inputs(chorale.parts[voice_index],
+    for voice_index, voice_id in enumerate(voice_ids):
+        inputs.append(part_to_inputs(chorale.parts[voice_id],
                                      index2notes[voice_index],
                                      note2indexes[voice_index]))
     return np.array(inputs)
@@ -205,12 +142,17 @@ def part_to_inputs(part, index2note, note2index):
     :return:
     """
     length = int(part.duration.quarterLength * SUBDIVISION)  # in 16th notes
-    list_notes = part.flat.notes
-    list_note_strings = [n.nameWithOctave for n in list_notes]
-    num_notes = len(list_notes)
+    list_events = part.flat.notesAndRests
+    list_events_strings = []
+    for e in list_events:
+        if e.isRest:
+            list_events_strings.append(e.name)
+        else:
+            list_events_strings.append(e.nameWithOctave)
+    num_events = len(list_events)
     # add entries to dictionaries if not present
     # should only be called by make_dataset when transposing
-    for note_name in list_note_strings:
+    for note_name in list_events_strings:
         if note_name not in index2note.values():
             new_index = len(index2note)
             index2note.update({new_index: note_name})
@@ -222,16 +164,16 @@ def part_to_inputs(part, index2note, note2index):
     t = np.zeros((length, 2))
     is_articulated = True
     while i < length:
-        if j < num_notes - 1:
-            if list_notes[j + 1].offset > i / SUBDIVISION:
-                t[i, :] = [note2index[standard_name(list_notes[j])], is_articulated]
+        if j < num_events - 1:
+            if list_events[j + 1].offset > i / SUBDIVISION:
+                t[i, :] = [note2index[standard_name(list_events[j])], is_articulated]
                 i += 1
                 is_articulated = False
             else:
                 j += 1
                 is_articulated = True
         else:
-            t[i, :] = [note2index[standard_name(list_notes[j])], is_articulated]
+            t[i, :] = [note2index[standard_name(list_events[j])], is_articulated]
             i += 1
             is_articulated = False
     return list(map(lambda pa: pa[0] if pa[1] else note2index[SLUR_SYMBOL], t))
@@ -260,11 +202,16 @@ def _min_max_midi_pitch(note_strings):
     return min_pitch, max_pitch
 
 
-def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, metadatas=None):
+def make_dataset(chorale_list,
+                 dataset_name,
+                 voice_ids=voice_ids_default,
+                 transpose=False,
+                 metadatas=None):
+
     X = []
     X_metadatas = []
+    index2notes, note2indexes = create_index_dicts(chorale_list, voice_ids=voice_ids)
     track_list = []
-    index2notes, note2indexes = create_index_dicts(chorale_list, num_voices=num_voices)
 
     # todo clean this part
     min_max_midi_pitches = np.array(list(map(lambda d: _min_max_midi_pitch(d.values()), index2notes)))
@@ -274,59 +221,75 @@ def make_dataset(chorale_list, dataset_name, num_voices=4, transpose=False, meta
         try:
             chorale = converter.parse(chorale_file)
             if transpose:
-                midi_pitches = [[n.pitch.midi for n in part.flat.notes] for part in chorale.parts]
+                midi_pitches = [[n.pitch.midi for n in chorale.parts[voice_id].flat.notes] for voice_id in voice_ids]
                 min_midi_pitches_current = np.array([min(l) for l in midi_pitches])
                 max_midi_pitches_current = np.array([max(l) for l in midi_pitches])
                 min_transposition = max(min_midi_pitches - min_midi_pitches_current)
                 max_transposition = min(max_midi_pitches - max_midi_pitches_current)
-                for t in range(min_transposition, max_transposition + 1):
+                for semi_tone in range(min_transposition, max_transposition + 1):
                     try:
-                        transposition_interval = interval.Interval(t)
+                        # necessary, won't transpose correctly otherwise
+                        interval_type, interval_nature = interval.convertSemitoneToSpecifierGeneric(semi_tone)
+                        transposition_interval = interval.Interval(str(interval_nature) + interval_type)
                         chorale_transposed = chorale.transpose(transposition_interval)
                         inputs = chorale_to_inputs(chorale_transposed,
-                                                   num_voices=num_voices,
+                                                   voice_ids=voice_ids,
                                                    index2notes=index2notes,
                                                    note2indexes=note2indexes)
+
                         md = []
                         if metadatas:
-                            for metadata in metadatas:
+                            for meta in metadatas:
                                 # todo add this
-                                if metadata.is_global:
+                                if meta.is_global:
                                     pass
                                 else:
-                                    md.append(metadata.evaluate(chorale_transposed))
+                                    try:
+                                        md.append(meta.evaluate(chorale_transposed))
+                                    except:
+                                        print('Problem occurs here:', meta)
                         X.append(inputs)
                         X_metadatas.append(md)
-                        track_list.append({'path': chorale_file, 'transpose': t})
+                        track_list.append({'path': chorale_file, 'transpose': semi_tone})
                     except KeyError:
-                        pass
+                        print('KeyError: File ' + chorale_file + ' skipped')
                     except FloatingKeyException:
-                        x = 1
-                        x = x+1
                         print('FloatingKeyException: File ' + chorale_file + ' skipped')
             else:
                 print("Warning: no transposition! shouldn't be used!")
                 inputs = chorale_to_inputs(chorale,
-                                           num_voices=num_voices,
+                                           voice_ids=voice_ids,
                                            index2notes=index2notes,
                                            note2indexes=note2indexes)
                 X.append(inputs)
+                if metadatas:
+                    for metadata in metadatas:
+                        # todo add this
+                        if metadata.is_global:
+                            pass
+                        else:
+                            md.append(metadata.evaluate(chorale))
+                X.append(inputs)
+                X_metadatas.append(md)
+                track_list.append({'path': chorale_file, 'transpose': 0})
 
         except (AttributeError, IndexError):
             if chorale_file in chorale_list:
                 chorale_list.remove(chorale_file)
-                print('Skipping file :', chorale_file)
+                print('Skipping file : ', chorale_file)
             else:
-                print('Trying to remove chorale :', chorale_file)
+                print('Trying to remove chorale : ', chorale_file)
                 print('But file is not in the chorale_list')
 
-    dataset = (X, X_metadatas, num_voices, index2notes, note2indexes, metadatas)
+    dataset = (X, X_metadatas, voice_ids, index2notes, note2indexes, metadatas)
     pickle.dump(dataset, open(dataset_name, 'wb'), pickle.HIGHEST_PROTOCOL)
 
     track_list_path = dataset_name[:dataset_name.find('.pickle')] + ' tracks.pickle'
     pickle.dump(track_list, open(track_list_path, 'wb'), pickle.HIGHEST_PROTOCOL)
 
-    print(str(len(X)) + ' files written in ' + dataset_name)
+    print('Final number of file procesed:', len(X))
+    print('Track list length:', len(track_list))
+    print('Saving data into file:', dataset_name)
 
 
 def to_onehot(index, num_indexes):
@@ -369,8 +332,11 @@ def all_features(chorale, voice_index, time_index, timesteps, num_pitches, num_v
 
     right_feature = chorale_to_onehot(chorale[time_index + timesteps: time_index: -1, :], num_pitches=num_pitches)
 
-    central_feature = time_slice_to_onehot(chorale[time_index, mask],
-                                           num_pitches[mask])
+    if num_voices > 1:
+        central_feature = time_slice_to_onehot(chorale[time_index, mask],
+                                               num_pitches[mask])
+    else:
+        central_feature = []
 
     # put timesteps=None to only have the current beat
     # beat is now considered as a metadata
@@ -417,16 +383,16 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
             where fermatas = (fermatas_left, central_fermatas, fermatas_right)
     """
 
-    X, X_metadatas, num_voices, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
-    X_metadatas = [meta[0:4] for meta in X_metadatas]
-    metadatas = metadatas[0:4]
+    X, X_metadatas, voice_ids, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
     num_pitches = list(map(lambda x: len(x), index2notes))
-
+    num_voices = len(voice_ids)
     # Set chorale_indices
     if phase == 'train':
         chorale_indices = np.arange(int(len(X) * percentage_train))
     if phase == 'test':
         chorale_indices = np.arange(int(len(X) * percentage_train), len(X))
+    if phase == 'all':
+        chorale_indices = np.arange(int(len(X)))
 
     left_features = []
     right_features = []
@@ -576,6 +542,12 @@ def seqs_to_stream(seqs):
 
 
 def indexed_chorale_to_score(seq, pickled_dataset):
+    """
+
+    :param seq: voice major
+    :param pickled_dataset:
+    :return:
+    """
     _, _, _, index2notes, note2indexes, _ = pickle.load(open(pickled_dataset, 'rb'))
     num_pitches = list(map(len, index2notes))
     slur_indexes = list(map(lambda d: d[SLUR_SYMBOL], note2indexes))
@@ -604,23 +576,23 @@ def indexed_chorale_to_score(seq, pickled_dataset):
     return score
 
 
-def create_index_dicts(chorale_list, num_voices=4):
+def create_index_dicts(chorale_list, voice_ids=voice_ids_default):
     """
     Returns two lists (index2notes, note2indexes) of size num_voices containing dictionaries
     :param chorale_list:
-    :param num_voices:
+    :param voice_ids:
     :param min_pitches:
     :param max_pitches:
     :return:
     """
     # store all notes
     voice_ranges = []
-    for voice_index in range(num_voices):
+    for voice_id in voice_ids:
         voice_range = set()
         for chorale_path in chorale_list:
             # todo transposition
             chorale = converter.parse(chorale_path)
-            part = chorale.parts[voice_index].flat
+            part = chorale.parts[voice_id].flat
             for n in part.notesAndRests:
                 voice_range.add(standard_name(n))
         # add additional symbols
@@ -631,7 +603,7 @@ def create_index_dicts(chorale_list, num_voices=4):
     # create tables
     index2notes = []
     note2indexes = []
-    for voice_index in range(num_voices):
+    for voice_index, _ in enumerate(voice_ids):
         l = list(voice_ranges[voice_index])
         index2note = {}
         note2index = {}
@@ -643,22 +615,32 @@ def create_index_dicts(chorale_list, num_voices=4):
     return index2notes, note2indexes
 
 
-def initialization(dataset_path=None, metadatas=None):
+def initialization(dataset_path=None,
+                   pickled_dataset=None,
+                   metadatas=None,
+                   voice_ids=voice_ids_default,
+                   BACH_DATASET=BACH_DATASET):
     from glob import glob
     print('Creating dataset')
     if dataset_path:
-        chorale_list = filter_file_list(glob(dataset_path + '/*.mid') + glob(dataset_path + '/*.xml'),
-                                        num_voices=NUM_VOICES)
-        pickled_dataset = 'datasets/custom_dataset/' + dataset_path.split('/')[-1] + '.pickle'
+        mid_list = glob(dataset_path + '/**/*.mid')
+        xml_list = glob(dataset_path + '/**/*.xml')
+        file_list = mid_list + xml_list
+        chorale_list = filter_file_list(file_list, num_voices=NUM_VOICES)
+        if not pickled_dataset:
+            pickled_dataset = os .path.join('datasets',
+                                            'custom_dataset',
+                                            dataset_path.split('/')[-1] + '.pickle')
     else:
         chorale_list = filter_file_list(corpus.getBachChorales(fileExtensions='xml'))
         pickled_dataset = BACH_DATASET
 
     # remove wrong chorales:
-    min_pitches, max_pitches = compute_min_max_pitches(chorale_list, voices=voice_ids)
+    _, _ = compute_min_max_pitches(chorale_list, voices=voice_ids)
 
-    make_dataset(chorale_list, pickled_dataset,
-                 num_voices=len(voice_ids),
+    make_dataset(chorale_list,
+                 pickled_dataset,
+                 voice_ids=voice_ids,
                  transpose=True,
                  metadatas=metadatas)
 
@@ -703,29 +685,62 @@ def get_gesualdo_tracks():
     num_voices = 5
     dataset_path = '/home/music/Documents/database/Carlo Gesualdo'
     mid_list = glob(dataset_path + '/**/*.mid')
-    xml_list = glob(dataset_path + '/**/*.xml')
+    xml_list = glob(dataset_path + '/**/*.mxl') + glob(dataset_path + '/**/*.xml')
     file_list = filter_file_list(mid_list + xml_list, num_voices=num_voices)
     return file_list
+
+
+def split_rest(chorale, max_duration=4):
+    from math import ceil
+    for rest in chorale.recurse().getElementsByClass(note.Rest):
+        d = rest.quarterLength
+        if d > max_duration:
+            d1 = ceil(d / max_duration)*max_duration - d
+            d2 = d - d1
+            n2 = int(d2 / max_duration)
+            d3 = d2 - n2 * max_duration
+            container = rest.activeSite
+            while container is not None:
+                print('Container :', container)
+                offset = rest.offset
+                container.remove(rest)
+                rest1 = note.Rest()
+                rest1.quarterLength = d1
+                container.insert(offset, rest1)
+                offset += rest1.quarterLength
+                for _ in range(n2):
+                    rest2 = note.Rest()
+                    rest2.quarterLength = max_duration
+                    container.insert(offset, rest2)
+                    offset += rest2.quarterLength
+                rest3 = note.Rest()
+                rest3.quarterLength = d3
+                container.insert(offset, rest3)
+                container = rest.activeSite
 
 
 if __name__ == '__main__':
     from glob import glob
     from metadata import *
 
-    num_voices = 5
-    file_list = get_gesualdo_tracks()
-    print('Number of file to be processed : ', len(file_list))
+    chorale_list = get_gesualdo_tracks()
+    _, _ = compute_min_max_pitches(chorale_list, voices=range(NUM_VOICES))
+    print('Number of file to be processed : ', len(chorale_list))
     pickled_path = 'datasets/custom_dataset/Carlo Gesualdo.pickle'
     win_size_for_not_playing = 16
     metadatas = [BeatMetadata(),
                  BeatStrengthMetadata(),
                  FermataMetadatas(),
                  TickMetadatas(SUBDIVISION),
-                 VoiceIPlaying(win_size_for_not_playing)]
+                 VoiceMetadata(0, window_size=win_size_for_not_playing),
+                 VoiceMetadata(1, window_size=win_size_for_not_playing),
+                 VoiceMetadata(2, window_size=win_size_for_not_playing),
+                 VoiceMetadata(3, window_size=win_size_for_not_playing),
+                 VoiceMetadata(4, window_size=win_size_for_not_playing)]
 
-    make_dataset(file_list,
+    make_dataset(chorale_list,
                  pickled_path,
-                 num_voices=num_voices,
+                 voice_ids=range(NUM_VOICES),
                  transpose=True,
                  metadatas=metadatas)
     exit()

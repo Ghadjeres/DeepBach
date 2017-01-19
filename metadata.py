@@ -108,14 +108,15 @@ class BeatMetadata(Metadata):
 
 
 # todo add voice_i_playing metadata
-class VoiceIPlaying(Metadata):
-    def __init__(self, window_size):
+class VoiceMetadata(Metadata):
+    def __init__(self, voice_id, window_size=4):
         """ Initiate the VoiceIPlaying metadata.
         Voice I is considered to be muted if more than 'window_size' contiguous subdivisions that contains a rest.
 
         :param window_size: (int) number of subdivision
         """
         self.window_size = window_size
+        self.voice_index = voice_id
         self.is_global = False
         self.num_values = 2
 
@@ -142,50 +143,49 @@ class VoiceIPlaying(Metadata):
         """
         num_voices = len(chorale.parts)
         length = int(chorale.duration.quarterLength * SUBDIVISION)
-        is_playing = np.ones(shape=(length, num_voices))
-        for voice_index in range(num_voices):
-            current_part = chorale[voice_index].flat.getElementsByClass(note.GeneralNote).stream()
-            curr_status = 'Rest'
-            deb_time = 0.0
-            fin_time = 0.0
-            if not current_part:
-                pass
-            else:
-                fin_time = current_part[0].offset
-                for event in current_part:
-                    if curr_status == 'Rest':
-                        if event.isRest:
-                            fin_time = event.offset + event.quarterLength
-                        else:
-                            deb_index = int(deb_time * SUBDIVISION)
-                            fin_index = int(fin_time * SUBDIVISION)
-                            if fin_index - deb_index > self.window_size:
-                                is_playing[deb_index:fin_index, voice_index] = 0
-                            else:
-                                pass
-                            deb_time = event.offset
-                            fin_time = deb_time + event.quarterLength
-                            curr_status = 'NotRest'
-                    elif curr_status == 'NotRest':
-                        deb_time = event.offset
-                        fin_time = deb_time + event.quarterLength
-                        if event.isRest:
-                            curr_status = 'Rest'
+        is_playing = np.ones(shape=(length,))
+        current_part = chorale[self.voice_index].flat.getElementsByClass(note.GeneralNote).stream()
+        curr_status = 'Rest'
+        deb_time = 0.0
+        fin_time = 0.0
+        if not current_part:
+            pass
+        else:
+            fin_time = current_part[0].offset
+            for event in current_part:
+                if curr_status == 'Rest':
+                    if event.isRest:
+                        fin_time = event.offset + event.quarterLength
+                    else:
+                        deb_index = int(deb_time * SUBDIVISION)
+                        fin_index = int(fin_time * SUBDIVISION)
+                        if fin_index - deb_index > self.window_size:
+                            is_playing[deb_index:fin_index] = 0
                         else:
                             pass
+                        deb_time = event.offset
+                        fin_time = deb_time + event.quarterLength
+                        curr_status = 'NotRest'
+                elif curr_status == 'NotRest':
+                    deb_time = event.offset
+                    fin_time = deb_time + event.quarterLength
+                    if event.isRest:
+                        curr_status = 'Rest'
                     else:
-                        raise ValueError
-            if curr_status == 'NotRest':
-                deb_time = fin_time
-            else:
-                pass
-            deb_index = int(deb_time * SUBDIVISION)
-            fin_index = length
-            is_playing[deb_index:fin_index, voice_index] = 0
+                        pass
+                else:
+                    raise ValueError
+        if curr_status == 'NotRest':
+            deb_time = fin_time
+        else:
+            pass
+        deb_index = int(deb_time * SUBDIVISION)
+        fin_index = length
+        is_playing[deb_index:fin_index] = 0
         return is_playing
 
     def generate(self, length):
-        return np.zeros(shape=(length,))
+        return np.ones(shape=(length,))
 
 
 class TickMetadatas(Metadata):
@@ -323,11 +323,9 @@ class FermataMetadatas(Metadata):
         j = 0
         i = 0
         fermatas = np.zeros((length,))
-        fermata = False
         while i < length:
             if j < num_notes - 1:
                 if list_notes[j + 1].offset > i / SUBDIVISION:
-
                     if len(list_notes[j].expressions) == 1:
                         fermata = True
                     else:
@@ -344,6 +342,7 @@ class FermataMetadatas(Metadata):
 
                 fermatas[i] = fermata
                 i += 1
+
         return np.array(fermatas, dtype=np.int32)
 
     def generate(self, length):
@@ -356,7 +355,7 @@ def all_time_signatures(chorale):
     num_voices = len(chorale.parts)
     ts_list = []
     for voice_index in range(num_voices):
-        ts_list.append(chorale[voice_index].getElementsByClass(meter.TimeSignature))
+        ts_list.append(chorale.parts[voice_index].flat.getElementsByClass(meter.TimeSignature))
     count = len(ts_list[0])
     for voice_index in range(1, num_voices):
         assert (count == len(ts_list[voice_index]))

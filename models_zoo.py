@@ -16,6 +16,7 @@ def deepBach(num_features_lr,
     :param num_features_lr: size of left or right features vectors
     :param num_features_c: size of central features vectors
     :param num_pitches: size of output
+    :param num_features_meta: ???
     :param num_units_lstm: list of lstm layer sizes
     :param num_dense:
     :return:
@@ -116,9 +117,9 @@ def deepbach_skip_connections(num_features_lr,
     predictions_center = merge((central_features, central_metas), mode='concat')
 
     # input dropout
-    predictions_left = Dropout(0.4)(predictions_left)
-    predictions_right = Dropout(0.4)(predictions_right)
-    predictions_center = Dropout(0.4)(predictions_center)
+    predictions_left = Dropout(0.2)(predictions_left)
+    predictions_right = Dropout(0.2)(predictions_right)
+    predictions_center = Dropout(0.2)(predictions_center)
 
     # embedding
     predictions_left = TimeDistributed(embedding_left)(predictions_left)
