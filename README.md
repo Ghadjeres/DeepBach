@@ -132,6 +132,10 @@ This plugin only generates C major/A minor chorales with cadences every to bars.
 
 Please consider citing this work or email me if you use DeepBach in musical projects. 
 
+### Pretrained model
+A pretrained model is available [here](https://www.dropbox.com/sh/qlcxv3dzj5zpcu5/AAB0PD55W3DCTJxQIRCNSbW1a?dl=0).
+Extract the archive contents in the DeepBach project root folder.
+
 ### Issues
 ImportError issues: Make sure DeepBach project is in your PYTHONPATH
 ```
