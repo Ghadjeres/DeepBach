@@ -703,7 +703,7 @@ def main():
                         type=int, default=128)
     parser.add_argument('-s', '--steps_per_epoch',
                         help='number of steps per epoch (default: %(default)s)',
-                        type=int, default=100)
+                        type=int, default=500)
     parser.add_argument('--validation_steps',
                         help='number of validation steps (default: %(default)s)',
                         type=int, default=20)
