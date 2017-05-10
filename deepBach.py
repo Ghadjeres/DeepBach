@@ -684,7 +684,7 @@ def train_models(model_name, steps_per_epoch, num_epochs, validation_steps, time
                       metrics=['accuracy'])
 
         model.fit_generator(generator_train, samples_per_epoch=steps_per_epoch,
-                            nb_epoch=num_epochs, verbose=1, validation_data=generator_val,
+                            epochs=num_epochs, verbose=1, validation_data=generator_val,
                             validation_steps=validation_steps)
 
         models.append(model)
