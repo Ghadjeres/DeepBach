@@ -272,7 +272,7 @@ def test_generation():
 
 
 @app.route('/models', methods=['GET'])
-def models():
+def get_models():
     global models_list
     # recompute model names present in folder models/
     models_list = glob('models/*.yaml')
