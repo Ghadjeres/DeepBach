@@ -139,7 +139,7 @@ def part_to_inputs(part, index2note, note2index):
     length = int(part.duration.quarterLength * SUBDIVISION)  # in 16th notes
     list_notes = part.flat.notes
     list_note_strings = [n.nameWithOctave for n in list_notes]
-    num_notes = len(list_notes)
+
     # add entries to dictionaries if not present
     # should only be called by make_dataset when transposing
     for note_name in list_note_strings:
@@ -153,17 +153,19 @@ def part_to_inputs(part, index2note, note2index):
     i = 0
     t = np.zeros((length, 2))
     is_articulated = True
+    list_notes_and_rests = part.flat.notesAndRests
+    num_notes = len(list_notes_and_rests)
     while i < length:
         if j < num_notes - 1:
-            if list_notes[j + 1].offset > i / SUBDIVISION:
-                t[i, :] = [note2index[standard_name(list_notes[j])], is_articulated]
+            if list_notes_and_rests[j + 1].offset > i / SUBDIVISION:
+                t[i, :] = [note2index[standard_name(list_notes_and_rests[j])], is_articulated]
                 i += 1
                 is_articulated = False
             else:
                 j += 1
                 is_articulated = True
         else:
-            t[i, :] = [note2index[standard_name(list_notes[j])], is_articulated]
+            t[i, :] = [note2index[standard_name(list_notes_and_rests[j])], is_articulated]
             i += 1
             is_articulated = False
     return list(map(lambda pa: pa[0] if pa[1] else note2index[SLUR_SYMBOL], t))
