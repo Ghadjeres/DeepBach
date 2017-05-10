@@ -1,14 +1,15 @@
 """
 Metadata classes
 """
-from data_utils import SUBDIVISION
-from music21 import analysis
 import numpy as np
+from data_utils import SUBDIVISION
+from music21 import analysis, stream
 
 
 class Metadata:
     def __init__(self):
         self.num_values = None
+        self.is_global = None
         raise NotImplementedError
 
     def get_index(self, value):
@@ -32,6 +33,46 @@ class Metadata:
 # todo add strong/weak beat metadata
 # todo add minor/major metadata
 # todo add voice_i_playing metadata
+
+class IsPlayingMetadata(Metadata):
+    def __init__(self, voice_index, min_num_ticks=SUBDIVISION):
+        """ Initiate the IsPlaying metadata.
+        Voice i is considered to be muted if more than 'window_size' contiguous subdivisions that contains a rest.
+
+        :param min_num_ticks: minimum length in ticks for a rest to be taken into account in the metadata
+        """
+        self.min_num_ticks = min_num_ticks
+        self.voice_index = voice_index
+        self.is_global = False
+        self.num_values = 2
+
+    def get_index(self, value):
+        return int(value)
+
+    def get_value(self, index):
+        return bool(index)
+
+    def evaluate(self, chorale):
+        """
+        takes a music21 chorale as input
+        """
+        length = int(chorale.duration.quarterLength * SUBDIVISION)
+        metadatas = np.ones(shape=(length,))
+        part = chorale.parts[self.voice_index]
+
+        for note_or_rest in part.notesAndRests:
+            is_playing = True
+            if note_or_rest.isRest:
+                if note_or_rest.quarterLength * SUBDIVISION >= self.min_num_ticks:
+                    is_playing = False
+            # these should be integer values
+            start_tick = note_or_rest.offset * SUBDIVISION
+            end_tick = start_tick + note_or_rest.quarterLength * SUBDIVISION
+            metadatas[start_tick:end_tick] = self.get_index(is_playing)
+        return metadatas
+
+    def generate(self, length):
+        return np.ones(shape=(length,))
 
 
 class TickMetadatas(Metadata):
@@ -80,6 +121,7 @@ class ModeMetadatas(Metadata):
         return 'other'
 
     def evaluate(self, chorale):
+        # todo add measures when in midi
         # init key analyzer
         ka = analysis.floatingKey.KeyAnalyzer(chorale)
         res = ka.run()
@@ -128,11 +170,16 @@ class KeyMetadatas(Metadata):
     # todo check if this method is correct for windowSize > 1
     def evaluate(self, chorale):
         # init key analyzer
-        ka = analysis.floatingKey.KeyAnalyzer(chorale)
+        # we must add measures by hand for the case when we are parsing midi files
+        chorale_with_measures = stream.Score()
+        for part in chorale.parts:
+            chorale_with_measures.append(part.makeMeasures())
+
+        ka = analysis.floatingKey.KeyAnalyzer(chorale_with_measures)
         ka.windowSize = self.window_size
         res = ka.run()
 
-        measure_offset_map = chorale.parts[0].measureOffsetMap()
+        measure_offset_map = chorale_with_measures.parts.measureOffsetMap()
         length = int(chorale.duration.quarterLength * SUBDIVISION)  # in 16th notes
 
         key_signatures = np.zeros((length,))
@@ -142,6 +189,10 @@ class KeyMetadatas(Metadata):
             beat_index = time_index / SUBDIVISION
             if beat_index in measure_offset_map:
                 measure_index += 1
+                # todo remove this trick: problem with the last measures...
+                if measure_index == len(res):
+                    measure_index -= 1
+
             key_signatures[time_index] = self.get_index(res[measure_index].sharps)
         return np.array(key_signatures, dtype=np.int32)
 
