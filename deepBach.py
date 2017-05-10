@@ -625,7 +625,7 @@ def load_models(model_base_name=None, num_voices=4):
     return models
 
 
-def train_models(model_name, samples_per_epoch, num_epochs, nb_val_samples, timesteps, pickled_dataset=BACH_DATASET,
+def train_models(model_name, steps_per_epoch, num_epochs, validation_steps, timesteps, pickled_dataset=BACH_DATASET,
                  num_voices=4, batch_size=16, metadatas=None):
     """
     Train models
@@ -683,9 +683,9 @@ def train_models(model_name, samples_per_epoch, num_epochs, nb_val_samples, time
                                               },
                       metrics=['accuracy'])
 
-        model.fit_generator(generator_train, samples_per_epoch=samples_per_epoch,
+        model.fit_generator(generator_train, samples_per_epoch=steps_per_epoch,
                             nb_epoch=num_epochs, verbose=1, validation_data=generator_val,
-                            nb_val_samples=nb_val_samples)
+                            validation_steps=validation_steps)
 
         models.append(model)
 
@@ -701,12 +701,12 @@ def main():
     parser.add_argument('-b', '--batch_size_train',
                         help='batch size used during training phase (default: %(default)s)',
                         type=int, default=128)
-    parser.add_argument('-s', '--samples_per_epoch',
-                        help='number of samples per epoch (default: %(default)s)',
-                        type=int, default=12800 * 7)
-    parser.add_argument('--num_val_samples',
-                        help='number of validation samples (default: %(default)s)',
-                        type=int, default=1280)
+    parser.add_argument('-s', '--steps_per_epoch',
+                        help='number of steps per epoch (default: %(default)s)',
+                        type=int, default=100)
+    parser.add_argument('--validation_steps',
+                        help='number of validation steps (default: %(default)s)',
+                        type=int, default=20)
     parser.add_argument('-u', '--num_units_lstm', nargs='+',
                         help='number of lstm units (default: %(default)s)',
                         type=int, default=[200, 200])
@@ -782,8 +782,8 @@ def main():
     num_pitches = list(map(len, index2notes))
     timesteps = args.timesteps
     batch_size = args.batch_size_train
-    samples_per_epoch = args.samples_per_epoch
-    nb_val_samples = args.num_val_samples
+    steps_per_epoch = args.steps_per_epoch
+    validation_steps = args.validation_steps
     num_units_lstm = args.num_units_lstm
     model_name = args.name.lower() + ext
     sequence_length = args.length
@@ -825,8 +825,8 @@ def main():
         create_models(model_name, create_new=overwrite, num_units_lstm=num_units_lstm, num_dense=num_dense,
                       pickled_dataset=pickled_dataset, num_voices=num_voices, metadatas=metadatas, timesteps=timesteps)
     if train:
-        models = train_models(model_name=model_name, samples_per_epoch=samples_per_epoch, num_epochs=num_epochs,
-                              nb_val_samples=nb_val_samples, timesteps=timesteps, pickled_dataset=pickled_dataset,
+        models = train_models(model_name=model_name, steps_per_epoch=steps_per_epoch, num_epochs=num_epochs,
+                              validation_steps=validation_steps, timesteps=timesteps, pickled_dataset=pickled_dataset,
                               num_voices=NUM_VOICES, metadatas=metadatas, batch_size=batch_size)
     else:
         models = load_models(model_name, num_voices=NUM_VOICES)
