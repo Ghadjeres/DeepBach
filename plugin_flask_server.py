@@ -49,6 +49,7 @@ def parallel_gibbs_server(models=None,
     print(type(models))
 
     sequence_length = len(input_chorale[:, 0])
+
     # init
     seq = np.zeros(shape=(2 * timesteps + sequence_length, num_voices))
     seq[timesteps: -timesteps, :] = input_chorale
@@ -202,25 +203,33 @@ def compose():
                                           note2indexes=note2indexes
                                           )
 
-        sequence_length = input_chorale.shape[-1]
         # generate metadata:
         # todo find a way to set metadata from musescore
         # you may choose a given chorale:
-        # chorale_metas = X_metadatas[11]
+        chorale_metas = X_metadatas[50]
+
         # or just generate them
-        chorale_metas = [metas.generate(sequence_length) for metas in metadatas]
+        # chorale_metas = [metas.generate(sequence_length) for metas in metadatas]
 
         # make chorale time major
         input_chorale = np.transpose(input_chorale, axes=(1, 0))
         NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE = 120
         start_tick_selection = float(request.form['start_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE
         end_tick_selection = float(request.form['end_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE
-        start_voice_index = int(request.form['start_staff'])
-        end_voice_index = int(request.form['end_staff'])
-        # if no selection
+        # if no selection REGENERATE and set chorale length
         if start_tick_selection == 0 and end_tick_selection == 0:
-            chorale_length = input_chorale.shape[0]
+            chorale_length = len(chorale_metas[0])
+            # randomize
+            input_chorale = np.array([np.random.randint(num_pitches[expert_index],
+                                                        size=(chorale_length,))
+                                      for expert_index in range(num_voices)])
+            input_chorale = np.transpose(input_chorale, axes=(1, 0))
             end_tick_selection = chorale_length
+            start_voice_index = 0
+            end_voice_index = num_voices - 1
+        else:
+            start_voice_index = int(request.form['start_staff'])
+            end_voice_index = int(request.form['end_staff'])
 
         diff = end_tick_selection - start_tick_selection + 1
         num_iterations = 100 * diff
