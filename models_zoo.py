@@ -94,9 +94,9 @@ def deepbach_skip_connections(num_features_lr, num_features_c, num_features_meta
 
     # embedding layer for left and right
     embedding_left = Dense(input_dim=num_features_lr + num_features_meta,
-                           output_dim=num_dense, name='embedding_left')
+                           units=num_dense, name='embedding_left')
     embedding_right = Dense(input_dim=num_features_lr + num_features_meta,
-                            output_dim=num_dense, name='embedding_right')
+                            units=num_dense, name='embedding_right')
 
     # merge features and metadata
 
