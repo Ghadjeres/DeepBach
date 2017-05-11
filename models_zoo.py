@@ -167,10 +167,10 @@ def deepbach_skip_connections(num_features_lr, num_features_c, num_features_meta
     pitch_prediction = Dense(num_pitches, activation='softmax',
                              name='pitch_prediction')(predictions)
 
-    model = Model(input=[left_features, central_features, right_features,
+    model = Model(inputs=[left_features, central_features, right_features,
 
                          left_metas, right_metas, central_metas],
-                  output=pitch_prediction)
+                  outputs=pitch_prediction)
 
     model.compile(optimizer='adam',
                   loss={'pitch_prediction': 'categorical_crossentropy'},
