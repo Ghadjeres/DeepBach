@@ -175,7 +175,9 @@ num_pitches = list(map(len, index2notes))
 models_list = glob('models/*.yaml')
 models_list = list(set(map(lambda name: '_'.join(name.split('_')[:-1]).split('/')[-1], models_list)))
 
-model_name = 'deepbach'
+# model_name = 'deepbach'
+model_name = 'skip_new'
+
 assert os.path.exists('models/' + model_name + '_' + str(num_voices - 1) + '.yaml')
 
 # load models
@@ -214,8 +216,8 @@ def compose():
         # make chorale time major
         input_chorale = np.transpose(input_chorale, axes=(1, 0))
         NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE = 120
-        start_tick_selection = float(request.form['start_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE
-        end_tick_selection = float(request.form['end_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE
+        start_tick_selection = int(float(request.form['start_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE)
+        end_tick_selection = int(float(request.form['end_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE)
         # if no selection REGENERATE and set chorale length
         if start_tick_selection == 0 and end_tick_selection == 0:
             chorale_length = len(chorale_metas[0])
@@ -240,6 +242,8 @@ def compose():
             batch_size_per_voice = 16
 
         num_iterations = max(int(num_iterations // batch_size_per_voice // num_voices), 5)
+
+
 
         # --- Generate---
         output_chorale = parallel_gibbs_server(models=models,
