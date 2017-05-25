@@ -89,5 +89,17 @@ ENV/
 .ropeproject
 
 # local files
+.idea/
 /stats/
 /datasets/Oll.xml
+deepbach_ressources/
+models/*.yaml
+models/*.h5
+old_models/
+good_model/
+generated_examples/
+datasets/raw_dataset/*.pickle
+datasets/custom_dataset/*.pickle
+
+*.tar.gz
+*.sh
