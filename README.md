@@ -5,19 +5,19 @@ Version 1.0 of this repository contains the implementation of the DeepBach model
 Gaëtan Hadjeres, François Pachet<br/>
 *arXiv preprint [arXiv:1612.01010](https://arxiv.org/abs/1612.01010)*
 
-The code uses python 3.5 together with [Keras](https://keras.io/) and [music21](http://web.mit.edu/music21/) libraries.
+The code uses python 3.6 together with [Keras](https://keras.io/) and [music21](http://web.mit.edu/music21/) libraries.
 
 Version 2.0 (this one) elaborates on this approach. Results will be presented in an upcoming paper.
 This version contains a Python Flask server and a MuseScore plugin providing an interactive use of DeepBach. 
 
 ## Installation
 
-You can download and install DeepBach's dependencies with the following commands:
+You can download and install DeepBach's dependencies using Anaconda with the following commands:
 
 ```
 git clone git@github.com:SonyCSL-Paris/DeepBach.git
 cd DeepBach
-sudo pip3 install -r requirements.txt
+conda env create -f environment.yml
 ```
 
 Make sure either  [Theano](<https://github.com/Theano/Theano>) or [Tensorflow](https://www.tensorflow.org/) is installed.
@@ -127,10 +127,10 @@ Select and (re)load a model.
 Select a zone in the chorale and click on the compose button.
 
 
-This plugin only generates C major/A minor chorales with cadences every to bars. This is a limitation of the plugin, not the model itself.
+This plugin only generates C major/A minor chorales with cadences every two bars. This is a limitation of the plugin, not the model itself.
 
 
-Please consider citing this work or email me if you use DeepBach in musical projects. 
+Please consider citing this work or emailing me if you use DeepBach in musical projects. 
 
 ### Pretrained model
 A pretrained model is available [here](https://www.dropbox.com/sh/qlcxv3dzj5zpcu5/AAB0PD55W3DCTJxQIRCNSbW1a?dl=0).
