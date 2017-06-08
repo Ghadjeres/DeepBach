@@ -242,9 +242,8 @@ def parallel_gibbs(models=None, melody=None, chorale_metas=None, sequence_length
 
     # Main loop
     for iteration in tqdm(range(num_iterations)):
-
         temperature = max(min_temperature, temperature * 0.9992)  # Recuit
-        print(temperature)
+        # print(temperature)
 
         time_indexes = {}
         probas = {}
@@ -800,6 +799,7 @@ def main():
         melody = converter.parse(args.midi_file)
         melody = part_to_inputs(melody.parts[0], index2note=index2notes[0], note2index=note2indexes[0])
         num_voices = NUM_VOICES - 1
+        sequence_length = len(melody)
         # todo find a way to specify metadatas when reharmonizing a given melody
         chorale_metas = [metas.generate(sequence_length) for metas in metadatas]
 
