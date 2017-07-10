@@ -1,6 +1,6 @@
 from keras.engine import Input
 from keras.engine import Model
-
+from keras.layers import merge
 from keras.layers import Dense, TimeDistributed, LSTM, Dropout, Activation, Lambda, concatenate, add
 
 
