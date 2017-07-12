@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on 7 mars 2016
-
 @author: Gaetan Hadjeres
 """
 import pickle
@@ -363,7 +362,7 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
     batch = 0
 
     while True:
-    #    chorale_index = np.random.choice(chorale_indices) -- KPKONZ CHANGED THIS LINE
+        chorale_index = np.random.choice(chorale_indices) 
         extended_chorale = np.transpose(X[chorale_index])
         chorale_metas = X_metadatas[chorale_index]
         padding_dimensions = (timesteps,) + extended_chorale.shape[1:]
