@@ -30,14 +30,10 @@ def deepBach(num_features_lr, num_features_c, num_pitches, num_features_meta, nu
     embedding_right = Dense(input_dim=num_features_lr + num_features_meta,
                             output_dim=num_dense, name='embedding_right')
 
-    predictions_left = TimeDistributed(embedding_left)(merge((left_features,
-                                                              left_metas),
-                                                             mode='concat'))
-    predictions_right = TimeDistributed(embedding_right)(merge((right_features,
-                                                                right_metas),
-                                                               mode='concat'))
+    predictions_left = TimeDistributed(embedding_left)(concatenate([left_features, left_metas]))
+    predictions_right = TimeDistributed(embedding_right)(concatenate([right_features, right_metas]))
 
-    predictions_center = merge((central_features, central_metas), mode='concat')
+    predictions_center = concatenate([central_features, central_metas])
 
     predictions_center = Dense(num_dense, activation='relu')(predictions_center)
     predictions_center = Dense(num_dense, activation='relu')(predictions_center)
@@ -55,8 +51,7 @@ def deepBach(num_features_lr, num_features_c, num_pitches, num_features_meta, nu
                                  name='lstm_right_' + str(stack_index)
                                  )(predictions_right)
 
-    predictions = merge((predictions_left, predictions_center, predictions_right),
-                        mode='concat')
+    predictions = concatenate([predictions_left, predictions_center, predictions_right])
     predictions = Dense(num_dense, activation='relu')(predictions)
     pitch_prediction = Dense(num_pitches, activation='softmax',
                              name='pitch_prediction')(predictions)

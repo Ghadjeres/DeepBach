@@ -19,8 +19,22 @@ cd DeepBach
 conda env create -f environment.yml
 ```
 
-Make sure either  [Theano](<https://github.com/Theano/Theano>) or [Tensorflow](https://www.tensorflow.org/) is installed.
-You also need to [configure properly the music editor called by music21](http://web.mit.edu/music21/doc/moduleReference/moduleEnvironment.html). 
+Make sure either [Theano](<https://github.com/Theano/Theano>) or [Tensorflow](https://www.tensorflow.org/) is installed.
+
+### music21 editor
+
+You also need to [configure properly the music editor called by music21](http://web.mit.edu/music21/doc/moduleReference/moduleEnvironment.html).On Ubuntu you can eg. use MuseScore:
+
+```shell
+sudo apt install musescore
+python -c 'import music21; music21.environment.set("musicxmlPath", "/usr/bin/musescore")'
+```
+
+For usage on a headless server (no X server), just set it to a dummy command:
+
+```shell
+python -c 'import music21; music21.environment.set("musicxmlPath", "/bin/true")'
+```
 
 ## Usage
 
@@ -67,25 +81,31 @@ optional arguments:
   -r [REHARMONIZATION], --reharmonization [REHARMONIZATION]
                         reharmonization of a melody from the corpus identified
                         by its id
-
-
 ```
 
 ## Examples
-Generate a chorale of length 100:
+
+On the first run it will preprocess the dataset (it may take ~1 hour) and create a model (possibly untrained). You can download preprocessed data and pre-trained model (see below) to save some time to quick-start experimenting.
+
+Generate a chorale of length 100 and show it in the editor:
 ```
 python3 deepBach.py -l 100
 ```
-Create a DeepBach model with three stacked lstm layers of size 200, hidden layers of size 500 and train it for 10 epochs before sampling:
+
+In addition save it to MIDI (useful for work on a server without GUI):
+```
+python3 deepBach.py -l 100 -o output.mid
+```
+
+Create a DeepBach model with three stacked lstm layers of size 200, hidden layers of size 500 and train it for 10 epochs, and then sample it:
 ```
 python3 deepBach.py --ext big -u 200 200 200 -d 500 -t 10
 ```
 
-Generate chorale harmonization with soprano extracted from midi/file/path.mid using parallel Gibbs sampling with 10000 updates (total number of updates)
+Generate chorale harmonization with soprano extracted from midi/file/path.mid using parallel Gibbs sampling with 20000 updates (total number of updates) and 16 updates per parallel batch:
 ```
-python3 deepBach.py -m midi/file/path.mid -p -i 20000
+python3 deepBach.py -m midi/file/path.mid -p 16 -i 20000
 ```
-
 
 Use another model with custom parameters:
 ```
@@ -99,7 +119,7 @@ python3 deepBach.py --dataset /path/to/dataset/folder/ --ext dowland -t 30 --tim
 
 Reharmonization of a melody from the training or testing set:
 ```
-python3 deepBach.py  -p -i 40000 -r 25
+python3 deepBach.py -p -i 40000 -r 25
 ```
 
 Default values load pre-trained DeepBach model and generate a chorale using sequential Gibbs sampling with 20000 iterations
@@ -128,15 +148,32 @@ Select a zone in the chorale and click on the compose button.
 
 This plugin only generates C major/A minor chorales with cadences every two bars. This is a limitation of the plugin, not the model itself.
 
+# Citing
 
-Please consider citing this work or emailing me if you use DeepBach in musical projects. 
+Please consider citing this work or emailing me if you use DeepBach in musical projects.
 
-### Pretrained model
-A pretrained model is available [here](https://www.dropbox.com/sh/qlcxv3dzj5zpcu5/AAB0PD55W3DCTJxQIRCNSbW1a?dl=0).
-Extract the archive contents in the DeepBach project root folder.
+### Pretrained model and pre-processed dataset
+
+A pretrained model and pre-processed dataset is available [via DropBox](https://www.dropbox.com/sh/qlcxv3dzj5zpcu5/AAB0PD55W3DCTJxQIRCNSbW1a?dl=0). Download and extract the archive contents to `datasets/` and `models/` in the DeepBach project root folder:
+
+```shell
+./download_pretrained_data.sh
+```
 
 ### Issues
-ImportError issues: Make sure DeepBach project is in your PYTHONPATH
+
+### ImportError issues
+
+Make sure DeepBach project is in your `PYTHONPATH`:
+
 ```
 export PYTHONPATH=/Path/to/DeepBach/Project
 ```
+
+### Music21 editor not set
+
+```
+music21.converter.subConverters.SubConverterException: Cannot find a valid application path for format musicxml. Specify this in your Environment by calling environment.set(None, '/path/to/application')
+```
+
+Either set it to MuseScore or similar (on a machine with GUI) to to a dummy command (on a server). See the installation section.
