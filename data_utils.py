@@ -5,7 +5,7 @@ Created on 7 mars 2016
 @author: Gaetan Hadjeres
 """
 import pickle
-
+import os.path
 from music21.analysis.floatingKey import FloatingKeyException
 from tqdm import tqdm
 
