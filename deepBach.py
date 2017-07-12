@@ -823,7 +823,7 @@ def main():
 
     if not os.path.exists('models/' + model_name + '_' + str(NUM_VOICES - 1) + '.yaml'):
         create_models(model_name, create_new=overwrite, num_units_lstm=num_units_lstm, num_dense=num_dense,
-                      pickled_dataset=pickled_dataset, num_voices= 4 #  num_voices=num_voices CHANGED THIS LINE 
+                      pickled_dataset=pickled_dataset, num_voices=num_voices #  num_voices=num_voices CHANGED THIS LINE 
                       , metadatas=metadatas, timesteps=timesteps)
     if train:
         models = train_models(model_name=model_name, steps_per_epoch=steps_per_epoch, num_epochs=num_epochs,
