@@ -579,7 +579,10 @@ def initialization(dataset_path=None, metadatas=None, voice_ids=voice_ids_defaul
     if dataset_path:
         chorale_list = filter_file_list(glob(dataset_path + '/*.mid') + glob(dataset_path + '/*.xml'),
                                         num_voices=NUM_VOICES)
-        pickled_dataset = 'datasets/custom_dataset/' + dataset_path.split('/')[-1] + '.pickle'
+        
+        # hardcode below for now, original code is not working. Try in cloud linux instance next
+        # pickled_dataset = 'datasets/custom_dataset/' + dataset_path.split('/')[-1] + '.pickle' 
+        pickled_dataset = 'datasets/custom_dataset/data.pickle' 
         
     else:
         chorale_list = filter_file_list(corpus.getBachChorales(fileExtensions='xml'))
