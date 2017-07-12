@@ -81,25 +81,31 @@ optional arguments:
   -r [REHARMONIZATION], --reharmonization [REHARMONIZATION]
                         reharmonization of a melody from the corpus identified
                         by its id
-
-
 ```
 
 ## Examples
-Generate a chorale of length 100:
+
+On the first run it will preprocess the dataset (it may take ~1 hour) and create a model (possibly untrained). You can download preprocessed data and pre-trained model (see below) to save some time to quick-start experimenting.
+
+Generate a chorale of length 100 and show it in the editor:
 ```
 python3 deepBach.py -l 100
 ```
-Create a DeepBach model with three stacked lstm layers of size 200, hidden layers of size 500 and train it for 10 epochs before sampling:
+
+In addition save it to MIDI (useful for work on a server without GUI):
+```
+python3 deepBach.py -l 100 -o output.mid
+```
+
+Create a DeepBach model with three stacked lstm layers of size 200, hidden layers of size 500 and train it for 10 epochs, and then sample it:
 ```
 python3 deepBach.py --ext big -u 200 200 200 -d 500 -t 10
 ```
 
-Generate chorale harmonization with soprano extracted from midi/file/path.mid using parallel Gibbs sampling with 10000 updates (total number of updates)
+Generate chorale harmonization with soprano extracted from midi/file/path.mid using parallel Gibbs sampling with 20000 updates (total number of updates) and 16 updates per parallel batch:
 ```
-python3 deepBach.py -m midi/file/path.mid -p -i 20000
+python3 deepBach.py -m midi/file/path.mid -p 16 -i 20000
 ```
-
 
 Use another model with custom parameters:
 ```
@@ -113,7 +119,7 @@ python3 deepBach.py --dataset /path/to/dataset/folder/ --ext dowland -t 30 --tim
 
 Reharmonization of a melody from the training or testing set:
 ```
-python3 deepBach.py  -p -i 40000 -r 25
+python3 deepBach.py -p -i 40000 -r 25
 ```
 
 Default values load pre-trained DeepBach model and generate a chorale using sequential Gibbs sampling with 20000 iterations
@@ -142,8 +148,9 @@ Select a zone in the chorale and click on the compose button.
 
 This plugin only generates C major/A minor chorales with cadences every two bars. This is a limitation of the plugin, not the model itself.
 
+# Citing
 
-Please consider citing this work or emailing me if you use DeepBach in musical projects. 
+Please consider citing this work or emailing me if you use DeepBach in musical projects.
 
 ### Pretrained model and pre-processed dataset
 
