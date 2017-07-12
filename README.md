@@ -19,8 +19,22 @@ cd DeepBach
 conda env create -f environment.yml
 ```
 
-Make sure either  [Theano](<https://github.com/Theano/Theano>) or [Tensorflow](https://www.tensorflow.org/) is installed.
-You also need to [configure properly the music editor called by music21](http://web.mit.edu/music21/doc/moduleReference/moduleEnvironment.html). 
+Make sure either [Theano](<https://github.com/Theano/Theano>) or [Tensorflow](https://www.tensorflow.org/) is installed.
+
+### music21 editor
+
+You also need to [configure properly the music editor called by music21](http://web.mit.edu/music21/doc/moduleReference/moduleEnvironment.html).On Ubuntu you can eg. use MuseScore:
+
+```shell
+sudo apt install musescore
+python -c 'import music21; music21.environment.set("musicxmlPath", "/usr/bin/musescore")'
+```
+
+For usage on a headless server (no X server), just set it to a dummy command:
+
+```shell
+python -c 'import music21; music21.environment.set("musicxmlPath", "/bin/true")'
+```
 
 ## Usage
 
@@ -140,7 +154,19 @@ A pretrained model and pre-processed dataset is available [via DropBox](https://
 ```
 
 ### Issues
-ImportError issues: Make sure DeepBach project is in your PYTHONPATH
+
+### ImportError issues
+
+Make sure DeepBach project is in your `PYTHONPATH`:
+
 ```
 export PYTHONPATH=/Path/to/DeepBach/Project
 ```
+
+### Music21 editor not set
+
+```
+music21.converter.subConverters.SubConverterException: Cannot find a valid application path for format musicxml. Specify this in your Environment by calling environment.set(None, '/path/to/application')
+```
+
+Either set it to MuseScore or similar (on a machine with GUI) to to a dummy command (on a server). See the installation section.
