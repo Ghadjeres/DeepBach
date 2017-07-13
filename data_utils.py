@@ -345,12 +345,16 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
     num_pitches = list(map(lambda x: len(x), index2notes))
     num_voices = len(voice_ids)
     # Set chorale_indices
+    total_size = len(X)
+    training_size = int(round(total_size * percentage_train))
     if phase == 'train':
-        chorale_indices = np.arange(int(len(X) * percentage_train))
+        chorale_indices = np.arange(training_size)
     if phase == 'test':
-        chorale_indices = np.arange(int(len(X) * percentage_train), len(X))
+        chorale_indices = np.arange(training_size, total_size)
     if phase == 'all':
-        chorale_indices = np.arange(int(len(X)))
+        chorale_indices = np.arange(total_size)
+
+    assert len(chorale_indices) > 0, "The list of chorales for the phase '%s' must not be empty" % phase
 
     left_features = []
     right_features = []
