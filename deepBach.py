@@ -13,7 +13,7 @@ from music21 import midi, converter
 from tqdm import tqdm
 
 from data_utils import generator_from_raw_dataset, BACH_DATASET, all_features, \
-    indexed_chorale_to_score, \
+    indexed_chorale_to_score, pickled_dataset_path, \
     initialization, START_SYMBOL, END_SYMBOL, part_to_inputs, all_metadatas, standard_note, SOP, BASS
 from metadata import *
 
@@ -763,8 +763,8 @@ def main():
     # set pickled_dataset argument
     if args.dataset:
         dataset_path = args.dataset
-        dataset_name = dataset_path.split('/')[-1]
-        pickled_dataset = 'datasets/custom_dataset/' + dataset_name + '.pickle'
+        pickled_dataset = pickled_dataset_path(dataset_path)
+        print('pickled_dataset', pickled_dataset)
     else:
         dataset_path = None
         pickled_dataset = BACH_DATASET
