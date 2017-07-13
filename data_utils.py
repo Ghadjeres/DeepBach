@@ -122,13 +122,17 @@ def chorale_to_inputs(chorale, voice_ids, index2notes, note2indexes):
     :param note2indexes:
     :return: (num_voices, time) matrix of indexes
     """
+    # we cannot assume all parts have the same length
+    length = int(chorale.duration.quarterLength * SUBDIVISION)  # in 16th notes
     inputs = []
     for voice_index, voice_id in enumerate(voice_ids):
-        inputs.append(part_to_inputs(chorale.parts[voice_id], index2notes[voice_index], note2indexes[voice_index]))
-    return np.array(inputs)
+        inputs.append(part_to_inputs(chorale.parts[voice_id], length, index2notes[voice_index], note2indexes[voice_index]))
+    output = np.array(inputs)
+    assert len(output.shape) == 2
+    return output
 
 
-def part_to_inputs(part, index2note, note2index):
+def part_to_inputs(part, length, index2note, note2index):
     """
     Can modify note2index and index2note!
     :param part:
@@ -136,7 +140,7 @@ def part_to_inputs(part, index2note, note2index):
     :param index2note:
     :return:
     """
-    length = int(part.duration.quarterLength * SUBDIVISION)  # in 16th notes
+
     list_notes = part.flat.notes
     list_note_strings = [n.nameWithOctave for n in list_notes]
 
@@ -344,6 +348,10 @@ def generator_from_raw_dataset(batch_size, timesteps, voice_index,
     X, X_metadatas, voice_ids, index2notes, note2indexes, metadatas = pickle.load(open(pickled_dataset, 'rb'))
     num_pitches = list(map(lambda x: len(x), index2notes))
     num_voices = len(voice_ids)
+
+    for i, chorale in enumerate(X):
+        assert len(chorale.shape) == 2, "Chorale %i should have dimension 2, but has shape: %s" (i, chorale.shape)
+
     # Set chorale_indices
     total_size = len(X)
     training_size = int(round(total_size * percentage_train))
