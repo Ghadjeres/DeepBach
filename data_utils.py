@@ -5,6 +5,7 @@ Created on 7 mars 2016
 
 @author: Gaetan Hadjeres
 """
+import os
 import pickle
 
 from music21.analysis.floatingKey import FloatingKeyException
@@ -585,13 +586,19 @@ def create_index_dicts(chorale_list, voice_ids=voice_ids_default):
     return index2notes, note2indexes
 
 
+def pickled_dataset_path(dataset_dir):
+    # last non-empty part is the dataset name
+    dataset_name = [el for el in dataset_dir.split('/') if el][-1]
+    return os.path.join('datasets/custom_dataset', dataset_name + '.pickle')
+
 def initialization(dataset_path=None, metadatas=None, voice_ids=voice_ids_default, BACH_DATASET=BACH_DATASET):
     from glob import glob
     print('Creating dataset')
     if dataset_path:
         chorale_list = filter_file_list(glob(dataset_path + '/*.mid') + glob(dataset_path + '/*.xml'),
                                         num_voices=NUM_VOICES)
-        pickled_dataset = 'datasets/custom_dataset/' + dataset_path.split('/')[-1] + '.pickle'
+        pickled_dataset = pickled_dataset_path(dataset_path)
+        print(pickled_dataset)
     else:
         chorale_list = filter_file_list(corpus.getBachChorales(fileExtensions='xml'))
         pickled_dataset = BACH_DATASET
