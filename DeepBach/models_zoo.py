@@ -1,10 +1,12 @@
 from keras.engine import Input
 from keras.engine import Model
 
-from keras.layers import Dense, TimeDistributed, LSTM, Dropout, Activation, Lambda, concatenate, add
+from keras.layers import Dense, TimeDistributed, LSTM, Dropout, Activation, \
+    Lambda, concatenate, add
 
 
-def deepBach(num_features_lr, num_features_c, num_pitches, num_features_meta, num_units_lstm=[200],
+def deepBach(num_features_lr, num_features_c, num_pitches, num_features_meta,
+             num_units_lstm=[200],
              num_dense=200, timesteps=16):
     """
 
@@ -16,12 +18,15 @@ def deepBach(num_features_lr, num_features_c, num_pitches, num_features_meta, nu
     :return:
     """
     # input
-    left_features = Input(shape=(timesteps, num_features_lr), name='left_features')
-    right_features = Input(shape=(timesteps, num_features_lr), name='right_features')
+    left_features = Input(shape=(timesteps, num_features_lr),
+                          name='left_features')
+    right_features = Input(shape=(timesteps, num_features_lr),
+                           name='right_features')
     central_features = Input(shape=(num_features_c,), name='central_features')
     # input metadatas
     left_metas = Input(shape=(timesteps, num_features_meta), name='left_metas')
-    right_metas = Input(shape=(timesteps, num_features_meta), name='right_metas')
+    right_metas = Input(shape=(timesteps, num_features_meta),
+                        name='right_metas')
     central_metas = Input(shape=(num_features_meta,), name='central_metas')
 
     # embedding layer for left and right
@@ -30,13 +35,17 @@ def deepBach(num_features_lr, num_features_c, num_pitches, num_features_meta, nu
     embedding_right = Dense(input_dim=num_features_lr + num_features_meta,
                             output_dim=num_dense, name='embedding_right')
 
-    predictions_left = TimeDistributed(embedding_left)(concatenate([left_features, left_metas]))
-    predictions_right = TimeDistributed(embedding_right)(concatenate([right_features, right_metas]))
+    predictions_left = TimeDistributed(embedding_left)(
+        concatenate([left_features, left_metas]))
+    predictions_right = TimeDistributed(embedding_right)(
+        concatenate([right_features, right_metas]))
 
     predictions_center = concatenate([central_features, central_metas])
 
-    predictions_center = Dense(num_dense, activation='relu')(predictions_center)
-    predictions_center = Dense(num_dense, activation='relu')(predictions_center)
+    predictions_center = Dense(num_dense, activation='relu')(
+        predictions_center)
+    predictions_center = Dense(num_dense, activation='relu')(
+        predictions_center)
 
     return_sequences = True
     for k, stack_index in enumerate(range(len(num_units_lstm))):
@@ -51,7 +60,8 @@ def deepBach(num_features_lr, num_features_c, num_pitches, num_features_meta, nu
                                  name='lstm_right_' + str(stack_index)
                                  )(predictions_right)
 
-    predictions = concatenate([predictions_left, predictions_center, predictions_right])
+    predictions = concatenate(
+        [predictions_left, predictions_center, predictions_right])
     predictions = Dense(num_dense, activation='relu')(predictions)
     pitch_prediction = Dense(num_pitches, activation='softmax',
                              name='pitch_prediction')(predictions)
@@ -68,7 +78,9 @@ def deepBach(num_features_lr, num_features_c, num_pitches, num_features_meta, nu
     return model
 
 
-def deepbach_skip_connections(num_features_lr, num_features_c, num_features_meta, num_pitches, num_units_lstm=[200],
+def deepbach_skip_connections(num_features_lr, num_features_c,
+                              num_features_meta, num_pitches,
+                              num_units_lstm=[200],
                               num_dense=200, timesteps=16):
     """
 
@@ -79,12 +91,15 @@ def deepbach_skip_connections(num_features_lr, num_features_c, num_features_meta
     :param num_dense:
     :return:
     """
-    left_features = Input(shape=(timesteps, num_features_lr), name='left_features')
-    right_features = Input(shape=(timesteps, num_features_lr), name='right_features')
+    left_features = Input(shape=(timesteps, num_features_lr),
+                          name='left_features')
+    right_features = Input(shape=(timesteps, num_features_lr),
+                           name='right_features')
     central_features = Input(shape=(num_features_c,), name='central_features')
 
     left_metas = Input(shape=(timesteps, num_features_meta), name='left_metas')
-    right_metas = Input(shape=(timesteps, num_features_meta), name='right_metas')
+    right_metas = Input(shape=(timesteps, num_features_meta),
+                        name='right_metas')
     central_metas = Input(shape=(num_features_meta,), name='central_metas')
 
     # embedding layer for left and right
@@ -109,9 +124,11 @@ def deepbach_skip_connections(num_features_lr, num_features_c, num_features_meta
     predictions_right = TimeDistributed(embedding_right)(predictions_right)
 
     # central NN
-    predictions_center = Dense(num_dense, activation='relu')(predictions_center)
+    predictions_center = Dense(num_dense, activation='relu')(
+        predictions_center)
     # predictions_center = Dropout(0.5)(predictions_center)
-    predictions_center = Dense(num_dense, activation='relu')(predictions_center)
+    predictions_center = Dense(num_dense, activation='relu')(
+        predictions_center)
 
     # left and right recurrent networks
     return_sequences = True
@@ -121,8 +138,10 @@ def deepbach_skip_connections(num_features_lr, num_features_c, num_features_meta
 
         if k > 0:
             # todo difference between concat and sum
-            predictions_left_tmp = add([Activation('relu')(predictions_left), predictions_left_old])
-            predictions_right_tmp = add([Activation('relu')(predictions_right), predictions_right_old])
+            predictions_left_tmp = add(
+                [Activation('relu')(predictions_left), predictions_left_old])
+            predictions_right_tmp = add(
+                [Activation('relu')(predictions_right), predictions_right_old])
         else:
             predictions_left_tmp = predictions_left
             predictions_right_tmp = predictions_right
@@ -148,23 +167,28 @@ def deepbach_skip_connections(num_features_lr, num_features_c, num_features_meta
 
     # retain only last input for skip connections
     predictions_left_old = Lambda(lambda t: t[:, -1, :],
-                                  output_shape=lambda input_shape: (input_shape[0], input_shape[-1])
+                                  output_shape=lambda input_shape: (
+                                  input_shape[0], input_shape[-1])
                                   )(predictions_left_old)
     predictions_right_old = Lambda(lambda t: t[:, -1, :],
-                                   output_shape=lambda input_shape: (input_shape[0], input_shape[-1],)
+                                   output_shape=lambda input_shape: (
+                                   input_shape[0], input_shape[-1],)
                                    )(predictions_right_old)
     # concat or sum
-    predictions_left = concatenate([Activation('relu')(predictions_left), predictions_left_old])
-    predictions_right = concatenate([Activation('relu')(predictions_right), predictions_right_old])
+    predictions_left = concatenate(
+        [Activation('relu')(predictions_left), predictions_left_old])
+    predictions_right = concatenate(
+        [Activation('relu')(predictions_right), predictions_right_old])
 
-    predictions = concatenate([predictions_left, predictions_center, predictions_right])
+    predictions = concatenate(
+        [predictions_left, predictions_center, predictions_right])
     predictions = Dense(num_dense, activation='relu')(predictions)
     pitch_prediction = Dense(num_pitches, activation='softmax',
                              name='pitch_prediction')(predictions)
 
     model = Model(inputs=[left_features, central_features, right_features,
 
-                         left_metas, right_metas, central_metas],
+                          left_metas, right_metas, central_metas],
                   outputs=pitch_prediction)
 
     model.compile(optimizer='adam',
