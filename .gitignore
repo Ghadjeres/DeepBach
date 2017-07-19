@@ -90,16 +90,15 @@ ENV/
 
 # local files
 .idea/
-/stats/
-/datasets/Oll.xml
+stats/
 deepbach_ressources/
-models/*.yaml
-models/*.h5
+DeepBach/models/*.yaml
+DeepBach/models/*.h5
 old_models/
 good_model/
 generated_examples/
-datasets/raw_dataset/*.pickle
-datasets/custom_dataset/*.pickle
+DeepBach/datasets/raw_dataset/*.pickle
+DeepBach/datasets/custom_dataset/*.pickle
 
 *.tar.gz
 *.sh
