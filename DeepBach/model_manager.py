@@ -649,7 +649,8 @@ def create_models(model_name=None, create_new=False, num_dense=200,
                              num_pitches=num_pitches[voice_index],
                              num_features_meta=left_metas.shape[-1],
                              num_dense=num_dense,
-                             num_units_lstm=num_units_lstm)
+                             num_units_lstm=num_units_lstm,
+                             timesteps=timesteps)
         elif 'skip' in model_name:
             model = deepbach_skip_connections(
                 num_features_lr=left_features.shape[-1],
