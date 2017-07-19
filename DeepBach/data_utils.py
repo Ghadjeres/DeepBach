@@ -655,7 +655,7 @@ def initialization(dataset_path=None, metadatas=None,
         print(pickled_dataset)
     else:
         chorale_list = filter_file_list(
-            corpus.getBachChorales(fileExtensions='xml')[:3])
+            corpus.getBachChorales(fileExtensions='xml'))
         pickled_dataset = BACH_DATASET
 
     # remove wrong chorales:
