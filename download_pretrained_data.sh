@@ -3,4 +3,6 @@ unzip pretrained_weights.zip
 # sic, with the double 's'
 tar -xzf deepbach_ressources.tar.gz
 # move deepbach_ressources/{datasets,models} to datasets/ and models/
-mv deepbach_ressources/* .
+# "mv deepbach_ressources/* DeepBach/" does not work
+
+rsync -a deepbach_ressources/* DeepBach/
