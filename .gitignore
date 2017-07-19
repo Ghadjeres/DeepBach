@@ -101,5 +101,4 @@ DeepBach/datasets/raw_dataset/*.pickle
 DeepBach/datasets/custom_dataset/*.pickle
 
 *.tar.gz
-*.sh
 !download_pretrained_data.sh
