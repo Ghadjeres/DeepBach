@@ -165,18 +165,18 @@ def main():
                               batch_size=batch_size)
     else:
         models = load_models(model_name, num_voices=NUM_VOICES)
-    temperature = 1.
-    timesteps = int(models[0].input[0]._keras_shape[1])
+        temperature = 1.
+        timesteps = int(models[0].input[0]._keras_shape[1])
 
-    seq = generation(model_base_name=model_name, models=models,
-                     timesteps=timesteps,
-                     melody=melody, initial_seq=None, temperature=temperature,
-                     chorale_metas=chorale_metas, parallel=parallel,
-                     batch_size_per_voice=batch_size_per_voice,
-                     num_iterations=num_iterations,
-                     sequence_length=sequence_length,
-                     output_file=output_file,
-                     pickled_dataset=pickled_dataset)
+        seq = generation(model_base_name=model_name, models=models,
+                         timesteps=timesteps,
+                         melody=melody, initial_seq=None, temperature=temperature,
+                         chorale_metas=chorale_metas, parallel=parallel,
+                         batch_size_per_voice=batch_size_per_voice,
+                         num_iterations=num_iterations,
+                         sequence_length=sequence_length,
+                         output_file=output_file,
+                         pickled_dataset=pickled_dataset)
 
 
 if __name__ == '__main__':
