@@ -121,10 +121,10 @@ def main():
     # when reharmonization
     if args.midi_file:
         melody = converter.parse(args.midi_file)
-        melody = part_to_inputs(melody.parts[0], index2note=index2notes[0],
+        sequence_length = len(melody)
+        melody = part_to_inputs(melody.parts[0], sequence_length, index2note=index2notes[0],
                                 note2index=note2indexes[0])
         num_voices = NUM_VOICES - 1
-        sequence_length = len(melody)
         # todo find a way to specify metadatas when reharmonizing a given melody
         chorale_metas = [metas.generate(sequence_length) for metas in
                          metadatas]
