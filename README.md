@@ -3,7 +3,7 @@ This repository contains implementations of the DeepBach model described in
 
 *DeepBach: a Steerable Model for Bach chorales generation*<br/>
 Gaëtan Hadjeres, François Pachet, Frank Nielsen<br/>
-*ICML 2017 [arXiv:1612.01010](https://arxiv.org/abs/1612.01010)*
+*ICML 2017 [arXiv:1612.01010](http://proceedings.mlr.press/v70/hadjeres17a.html)*
 
 
 The code uses python 3.6 together with [PyTorch v1.0](https://pytorch.org/) and
