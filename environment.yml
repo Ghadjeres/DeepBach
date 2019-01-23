@@ -49,11 +49,8 @@ dependencies:
     - jinja2==2.10
     - markupsafe==1.1.0
     - music21==5.5.0
-    - nnvm==0.8.0
-    - topi==0.5.dev0
     - torch==1.0.0
     - tqdm==4.29.0
-    - tvm==0.5.dev0
     - werkzeug==0.14.1
 prefix: /home/gaetan/Public/Python/anaconda3/envs/deepbach_pytorch
 
