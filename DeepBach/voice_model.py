@@ -190,7 +190,8 @@ class VoiceModel(nn.Module):
         print(f'Model {self.__repr__()} saved')
 
     def load(self):
-        state_dict = torch.load('models/' + self.__repr__())
+        state_dict = torch.load('models/' + self.__repr__(),
+                                map_location=lambda storage, loc: storage)
         print(f'Loading {self.__repr__()}')
         self.load_state_dict(state_dict)
 
