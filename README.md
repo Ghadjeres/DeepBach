@@ -85,12 +85,12 @@ starts a Flask server listening on port 5000. You can then use
 
 This server can also been started using Docker with:
 ```
-docker run -p 5000:5000 -it --rm deepbach:1.0
+docker run -p 5000:5000 -it --rm ghadjeres/deepbach
 ```
 (CPU version), with
 or
 ```
-docker run --runtime=nvidia -p 5000:5000 -it --rm deepbach:1.0
+docker run --runtime=nvidia -p 5000:5000 -it --rm ghadjeres/deepbach
 ```
 (GPU version, requires [nvidia-docker](https://github.com/NVIDIA/nvidia-docker).
 
