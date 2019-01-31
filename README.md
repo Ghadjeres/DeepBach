@@ -28,7 +28,8 @@ This will create a conda env named `deepbach_pytorch`.
 
 ### music21 editor
 
-You might need to [configure properly the music editor called by music21](http://web.mit
+You might need to
+Open a four-part chorale. Press enter on the server address, a list of computed models should appear. Select and (re)load a model. [configure properly the music editor called by music21](http://web.mit
 .edu/music21/doc/moduleReference/moduleEnvironment.html).On Ubuntu you can eg. use MuseScore:
 
 ```shell
@@ -71,6 +72,41 @@ python deepBach.py
 ```
 
 You can train a new model from scratch by adding the `--train` flag.
+
+
+## Usage with NONOTO
+The command 
+```
+python flask_server.py
+```
+starts a Flask server listening on port 5000. You can then use 
+[NONOTO](https://github.com/SonyCSLParis/NONOTO) to compose with DeepBach in an interactive way.
+
+This server can also been started using Docker with:
+```
+docker run -p 5000:5000 -it --rm deepbach:1.0
+```
+(CPU version), with
+or
+```
+docker run --runtime=nvidia -p 5000:5000 -it --rm deepbach:1.0
+```
+(GPU version, requires [nvidia-docker](https://github.com/NVIDIA/nvidia-docker).
+
+
+## Usage within MuseScore
+*Deprecated*
+
+This only works with MuseScore2.
+
+Put `deepBachMuseScore.qml` file in your `MuseScore2/Plugins` directory, and run
+```
+python musescore_flask_server.py
+```
+Open MuseScore and activate deepBachMuseScore plugin using the Plugin manager.
+You can then click on the Compose button without any selection to create a new chorale from 
+scratch. You can then select a region in the chorale score and click on the Compose button to 
+regenerated this region using DeepBach.
 
 
 ### Issues
