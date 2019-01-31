@@ -56,6 +56,7 @@ local_settings.py
 # Flask stuff:
 instance/
 .webassets-cache
+app.log.*
 
 # Scrapy stuff:
 .scrapy
@@ -102,3 +103,5 @@ DeepBach/datasets/custom_dataset/*.pickle
 
 *.tar.gz
 !download_pretrained_data.sh
+DatasetManager/dataset_cache/
+models/
