@@ -29,8 +29,9 @@ This will create a conda env named `deepbach_pytorch`.
 ### music21 editor
 
 You might need to
-Open a four-part chorale. Press enter on the server address, a list of computed models should appear. Select and (re)load a model. [configure properly the music editor called by music21](http://web.mit
-.edu/music21/doc/moduleReference/moduleEnvironment.html).On Ubuntu you can eg. use MuseScore:
+Open a four-part chorale. Press enter on the server address, a list of computed models should appear. Select and (re)load a model. 
+[Configure properly the music editor
+ called by music21](http://web.mit.edu/music21/doc/moduleReference/moduleEnvironment.html). On Ubuntu you can eg. use MuseScore:
 
 ```shell
 sudo apt install musescore
