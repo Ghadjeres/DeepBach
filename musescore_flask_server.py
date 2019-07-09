@@ -231,7 +231,7 @@ def compose():
                     time_index_range_ticks=time_index_range_ticks,
                     fermatas=fermatas_tensor,
                     voice_index_range=[start_voice_index, end_voice_index],
-                    random_init=False
+                    random_init=True
                 )
 
                 response = sheet_to_response(sheet=output_sheet)
