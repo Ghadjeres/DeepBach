@@ -296,6 +296,9 @@ class DeepBach:
                     probas_pitch = np.exp(probas_pitch) / np.sum(
                         np.exp(probas_pitch)) - 1e-7
 
+                    # avoid non-probabilities
+                    probas_pitch[probas_pitch < 0] = 0
+
                     # pitch can include slur_symbol
                     pitch = np.argmax(np.random.multinomial(1, probas_pitch))
 
