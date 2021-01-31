@@ -170,8 +170,8 @@ class DeepBach:
         # randomize regenerated part
         if random_init:
             a, b = time_index_range_ticks
-            tensor_chorale[:, a:b] = self.dataset.random_score_tensor(
-                b - a)
+            tensor_chorale[voice_index_range[0]:voice_index_range[1], a:b] = self.dataset.random_score_tensor(
+                b - a)[voice_index_range[0]:voice_index_range[1], :]
 
         tensor_chorale = self.parallel_gibbs(
             tensor_chorale=tensor_chorale,
