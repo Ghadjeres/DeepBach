@@ -71,6 +71,7 @@ class DatasetManager:
         if os.path.exists(dataset.filepath):
             print(f'Loading {dataset.__repr__()} from {dataset.filepath}')
             dataset = torch.load(dataset.filepath)
+            dataset.cache_dir = self.cache_dir
             print(f'(the corresponding TensorDataset is not loaded)')
         else:
             print(f'Creating {dataset.__repr__()}, '
