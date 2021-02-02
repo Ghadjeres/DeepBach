@@ -1,8 +1,8 @@
 import QtQuick 2.2
 import QtQuick.Dialogs 1.2
 import QtQuick.Controls 1.1
-import MuseScore 1.0
-import FileIO 1.0
+import MuseScore 3.0
+import FileIO 3.0
 
 MuseScore {
     id: mainMuseScoreObj
@@ -13,20 +13,26 @@ MuseScore {
     property variant serverCalled: false
     property variant loading: false
     property variant linesLogged: 0
+    property variant serverAddress: "http://localhost:5000/"
     FileIO {
         id: myFile
-        source: tempPath() + "/" + mainMuseScoreObj.curScore.title + "_recomposed_by_deepBach.xml"
+        source: "/tmp/deepbach.mxl"
+        onError: console.log(msg)
+    }
+    FileIO {
+        id: myFileXml
+        source: "/tmp/deepbach.xml"
         onError: console.log(msg)
     }
     onRun: {
         console.log('on run called')
-        if (mainMuseScoreObj.serverCalled !== serverAddressInput.text || modelSelector.model.length === 0) {
+        if (mainMuseScoreObj.serverCalled !== serverAddress || modelSelector.model.length === 0) {
             var requestModels = getRequestObj('GET', 'models')
             if (call(
                 requestModels,
                 false,
                 function(responseText){
-                    mainMuseScoreObj.serverCalled = serverAddressInput.text;
+                    mainMuseScoreObj.serverCalled = serverAddress;
                     try {
                         modelSelector.model = JSON.parse(responseText)
                         logStatus('Models list loaded')
@@ -51,7 +57,7 @@ MuseScore {
 
                 }
             )) {
-                logStatus('Retrieving models list at ' + serverAddressInput.text)
+                logStatus('Retrieving models list at ' + serverAddress)
             }
         }
     }
@@ -60,48 +66,18 @@ MuseScore {
         color: "white"
         Text {
             id: title
-            text: "Deep Bach"
+            text: "DeepBach"
             font.family: "Helvetica"
-            font.pointSize: 24
-            color: "green"
+            font.pointSize: 20
+            color: "black"
             anchors.top: wrapperPanel.top
             anchors.topMargin: 10
-            font.underline: true
-        }
-        Label {
-            id: serverInputLabel
-            wrapMode: Text.WordWrap
-            text: 'Server address'
-            font.pointSize:12
-            anchors.left: wrapperPanel.left
-            anchors.top: title.top
-            anchors.topMargin: 35
-        }
-        TextField {
-            id: serverAddressInput
-            text: "http://localhost:5000/"
-            anchors.left: wrapperPanel.left
-            anchors.top: serverInputLabel.top
-            anchors.topMargin: 15
-            width: 200
-            height: 20
-            onEditingFinished: {
-                console.log('editing finished')
-                mainMuseScoreObj.onRun();
-            } 
-        }
-        ComboBox {
-            id: modelSelector
-            anchors.top: serverAddressInput.bottom 
-            anchors.topMargin: 15
-            model: []
-            width: 200
+            font.underline: false
         }
         Button {
             id : loadModel
-            anchors.top: modelSelector.top
-            anchors.left: modelSelector.right
-            anchors.leftMargin: 10
+            anchors.top: title.bottom 
+            anchors.topMargin: 15
             text: qsTr("Load")
             onClicked: {
                 if (modelSelector.model[modelSelector.currentIndex]) {
@@ -120,11 +96,19 @@ MuseScore {
                 }
             }
         }
+        ComboBox {
+            id: modelSelector
+            anchors.top: modelSelector.top
+            anchors.left: modelSelector.right
+            anchors.leftMargin: 10
+            model: []
+            width: 100
+            visible: false
+        }
         Button {
             id : buttonOpenFile
             text: qsTr("Compose")
-            anchors.left: wrapperPanel.left
-            anchors.top: modelSelector.top
+            anchors.top: loadModel.top
             anchors.topMargin: 30
             anchors.bottomMargin: 10
             onClicked: {
@@ -135,10 +119,12 @@ MuseScore {
                 cursor.rewind(2);
                 var endStaff = cursor.staffIdx;
                 var endTick = cursor.tick;
-                var extension = 'xml'
+                var extension = 'mxl'
                 // var targetFile = tempPath() + "/my_file." + extension
                 myFile.remove();
+                logStatus(myFile.source);
                 var res = writeScore(mainMuseScoreObj.curScore, myFile.source, extension)
+                logStatus(res);
                 var request = getRequestObj("POST", 'compose')
                 if (call(
                     request,
@@ -147,13 +133,15 @@ MuseScore {
                         end_staff: endStaff,
                         start_tick: startTick,
                         end_tick: endTick,
-                        xml_string: myFile.read()
+//                        xml_string: myFile.read(),
+                        file_path: myFile.source
                     },
                     function(response) {
                         if (response) {
                             logStatus('Done composing')
-                            myFile.write(response)
-                            readScore(myFile.source)
+                            // myFileXml.write(response)
+                            readScore(myFileXml.source)		
+
                         } else {
                             logStatus('Got Empty Response when composing')
                         }
@@ -167,12 +155,13 @@ MuseScore {
             id: statusLabel
             wrapMode: Text.WordWrap
             text: ''
-            color: 'green'
+            color: 'grey'
             font.pointSize:12
             anchors.left: wrapperPanel.left
             anchors.top: buttonOpenFile.top
             anchors.leftMargin: 10
             anchors.topMargin: 30
+            visible: false
         }
     }
     function logStatus(text) {
@@ -191,7 +180,7 @@ MuseScore {
         console.debug('calling endpoint ' + endpoint)
         var request = new XMLHttpRequest()
         endpoint = endpoint || ''
-        request.open(method, serverAddressInput.text + endpoint, true)
+        request.open(method, serverAddress + endpoint, true)
         return request
     }
     function call(request, params, cb) {
