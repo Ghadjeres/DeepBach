@@ -485,7 +485,8 @@ class ChoraleDataset(MusicDataset):
         chorale_tensor = torch.from_numpy(chorale_tensor).long().clone()
         return chorale_tensor
 
-    def tensor_to_score(self, tensor_score):
+    def tensor_to_score(self, tensor_score,
+            fermata_tensor=None):
         """
         :param tensor_score: (num_voices, length)
         :return: music21 score object
@@ -494,12 +495,25 @@ class ChoraleDataset(MusicDataset):
                         for note2index in self.note2index_dicts]
 
         score = music21.stream.Score()
+        num_voices = tensor_score.size(0)
+        name_parts = (num_voices == 4)
+        part_names = ['Soprano', 'Alto', 'Tenor', 'Bass']
+
+        
         for voice_index, (voice, index2note, slur_index) in enumerate(
                 zip(tensor_score,
                     self.index2note_dicts,
                     slur_indexes)):
-            part = stream.Part(id='part' + str(voice_index))
+            add_fermata = False
+            if name_parts:
+                part = stream.Part(id=part_names[voice_index],
+                partName=part_names[voice_index],
+                partAbbreviation=part_names[voice_index],
+                instrumentName=part_names[voice_index])
+            else:
+                part = stream.Part(id='part' + str(voice_index))
             dur = 0
+            total_duration = 0
             f = music21.note.Rest()
             for note_index in [n.item() for n in voice]:
                 # if it is a played note
@@ -507,14 +521,32 @@ class ChoraleDataset(MusicDataset):
                     # add previous note
                     if dur > 0:
                         f.duration = music21.duration.Duration(dur / self.subdivision)
+
+                        if add_fermata:
+                            f.expressions.append(music21.expressions.Fermata())
+                            add_fermata = False
+
                         part.append(f)
+
 
                     dur = 1
                     f = standard_note(index2note[note_index])
+                    if fermata_tensor is not None and voice_index == 0:
+                        if fermata_tensor[0, total_duration] == 1:
+                            add_fermata = True
+                        else:
+                            add_fermata = False
+                    total_duration += 1
+
                 else:
                     dur += 1
+                    total_duration += 1
             # add last note
             f.duration = music21.duration.Duration(dur / self.subdivision)
+            if add_fermata:
+                f.expressions.append(music21.expressions.Fermata())
+                add_fermata = False
+
             part.append(f)
             score.insert(part)
         return score
