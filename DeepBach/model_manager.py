@@ -2,6 +2,7 @@
 @author: Gaetan Hadjeres
 """
 
+from DatasetManager.metadata import FermataMetadata
 import numpy as np
 import torch
 from DeepBach.helpers import cuda_variable, to_numpy
@@ -170,8 +171,8 @@ class DeepBach:
         # randomize regenerated part
         if random_init:
             a, b = time_index_range_ticks
-            tensor_chorale[:, a:b] = self.dataset.random_score_tensor(
-                b - a)
+            tensor_chorale[voice_index_range[0]:voice_index_range[1], a:b] = self.dataset.random_score_tensor(
+                b - a)[voice_index_range[0]:voice_index_range[1], :]
 
         tensor_chorale = self.parallel_gibbs(
             tensor_chorale=tensor_chorale,
@@ -184,8 +185,15 @@ class DeepBach:
             voice_index_range=voice_index_range,
         )
 
+        # get fermata tensor
+        for metadata_index, metadata in enumerate(self.dataset.metadatas):
+            if isinstance(metadata, FermataMetadata):
+                break
+
+
         score = self.dataset.tensor_to_score(
-            tensor_score=tensor_chorale)
+            tensor_score=tensor_chorale,
+            fermata_tensor=tensor_metadata[:, :, metadata_index])
 
         return score, tensor_chorale, tensor_metadata
 

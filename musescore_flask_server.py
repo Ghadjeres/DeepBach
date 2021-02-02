@@ -4,6 +4,7 @@ import pickle
 import click
 import tempfile
 from glob import glob
+import subprocess
 
 import music21
 import numpy as np
@@ -25,6 +26,7 @@ ALLOWED_EXTENSIONS = {'xml', 'mxl', 'mid', 'midi'}
 app = Flask(__name__)
 
 deepbach = None
+_tensor_metadata = None
 _num_iterations = None
 _sequence_length_ticks = None
 _ticks_per_quarter = None
@@ -86,6 +88,7 @@ def init_app(note_embedding_dim,
     global _sequence_length_ticks
     global _num_iterations
     global _ticks_per_quarter
+    global bach_chorales_dataset
 
     _ticks_per_quarter = ticks_per_quarter
     _sequence_length_ticks = sequence_length_ticks
@@ -99,10 +102,12 @@ def init_app(note_embedding_dim,
         'subdivision':    4
     }
 
-    bach_chorales_dataset: ChoraleDataset = dataset_manager.get_dataset(
+    _bach_chorales_dataset: ChoraleDataset = dataset_manager.get_dataset(
         name='bach_chorales',
         **chorale_dataset_kwargs
     )
+    bach_chorales_dataset = _bach_chorales_dataset
+
     assert sequence_length_ticks % bach_chorales_dataset.subdivision == 0
 
     global deepbach
@@ -185,57 +190,82 @@ def compose():
     global _sequence_length_ticks
     global _tensor_sheet
     global _tensor_metadata
+    global bach_chorales_dataset
 
     # global models
-    # --- Parse request---
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.xml') as file:
-        print(file.name)
+    NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE = 120
+    start_tick_selection = int(float(
+        request.form['start_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE)
+    end_tick_selection = int(
+        float(request.form['end_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE)
+    file_path = request.form['file_path']
+    root, ext = os.path.splitext(file_path)
+    dir = os.path.dirname(file_path)
+    assert ext == '.mxl'
+    xml_file = f'{root}.xml'
 
-        # TODO xml string is empty :( ?!
-        # xml_string = request.form['xml_string']
-        # file.write(xml_string)
+    # if no selection REGENERATE and set chorale length
+    if start_tick_selection == 0 and end_tick_selection == 0:
+        generated_sheet = compose_from_scratch()
+        generated_sheet.write('xml', xml_file)
+        return sheet_to_response(generated_sheet)
+    else:        
+        # --- Parse request---
+        # Old method: does not work because the MuseScore plugin does not export to xml but only to compressed .mxl
+        # with tempfile.NamedTemporaryFile(mode='wb', suffix='.xml') as file:
+        #     print(file.name)
+        #     xml_string = request.form['xml_string']
+        #     file.write(xml_string)
+        #     music21_parsed_chorale = converter.parse(file.name)
 
-        if _tensor_sheet is None:
-            generated_sheet = compose_from_scratch()
-            return sheet_to_response(generated_sheet)
+        # file_path points to an mxl file: we extract it
+        subprocess.run(f'unzip -o {file_path} -d  {dir}', shell=True)
+        music21_parsed_chorale = converter.parse(xml_file)
+        
+        
+        _tensor_sheet, _tensor_metadata = bach_chorales_dataset.transposed_score_and_metadata_tensors(music21_parsed_chorale, semi_tone=0)
+
+        start_voice_index = int(request.form['start_staff'])
+        end_voice_index = int(request.form['end_staff']) + 1
+
+        time_index_range_ticks = [start_tick_selection, end_tick_selection]
+
+        region_length = end_tick_selection - start_tick_selection
+
+        # compute batch_size_per_voice:
+        if region_length <= 8:
+            batch_size_per_voice = 2
+        elif region_length <= 16:
+            batch_size_per_voice = 4
         else:
-            # parse request
-            NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE = 120
-            start_tick_selection = int(float(
-                request.form['start_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE)
-            end_tick_selection = int(
-                float(request.form['end_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE)
+            batch_size_per_voice = 8
 
-            # if no selection REGENERATE and set chorale length
-            if start_tick_selection == 0 and end_tick_selection == 0:
-                generated_sheet = compose_from_scratch()
-                return sheet_to_response(generated_sheet)
-            else:
-                start_voice_index = int(request.form['start_staff'])
-                end_voice_index = int(request.form['end_staff']) + 1
 
-                time_index_range_ticks = [start_tick_selection, end_tick_selection]
+        num_total_iterations = int(_num_iterations * region_length / batch_size_per_voice)
 
-                fermatas_tensor = get_fermatas_tensor(_tensor_metadata)
+        fermatas_tensor = get_fermatas_tensor(_tensor_metadata)
 
-                # --- Generate---
-                (output_sheet,
-                 _tensor_sheet,
-                 _tensor_metadata) = deepbach.generation(
-                    tensor_chorale=_tensor_sheet,
-                    tensor_metadata=_tensor_metadata,
-                    temperature=1.,
-                    batch_size_per_voice=batch_size_per_voice,
-                    num_iterations=_num_iterations,
-                    sequence_length_ticks=_sequence_length_ticks,
-                    time_index_range_ticks=time_index_range_ticks,
-                    fermatas=fermatas_tensor,
-                    voice_index_range=[start_voice_index, end_voice_index],
-                    random_init=False
-                )
+        # --- Generate---
+        (output_sheet,
+            _tensor_sheet,
+            _tensor_metadata) = deepbach.generation(
+            tensor_chorale=_tensor_sheet,
+            tensor_metadata=_tensor_metadata,
+            temperature=1.,
+            batch_size_per_voice=batch_size_per_voice,
+            num_iterations=num_total_iterations,
+            sequence_length_ticks=_sequence_length_ticks,
+            time_index_range_ticks=time_index_range_ticks,
+            fermatas=fermatas_tensor,
+            voice_index_range=[start_voice_index, end_voice_index],
+            random_init=True
+        )
 
-                response = sheet_to_response(sheet=output_sheet)
-                return response
+
+        
+        output_sheet.write('xml', xml_file)
+        response = sheet_to_response(sheet=output_sheet)
+        return response
 
 
 def get_fermatas_tensor(metadata_tensor: torch.Tensor) -> torch.Tensor:
