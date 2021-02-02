@@ -2,6 +2,7 @@
 @author: Gaetan Hadjeres
 """
 
+from DatasetManager.metadata import FermataMetadata
 import numpy as np
 import torch
 from DeepBach.helpers import cuda_variable, to_numpy
@@ -184,8 +185,15 @@ class DeepBach:
             voice_index_range=voice_index_range,
         )
 
+        # get fermata tensor
+        for metadata_index, metadata in enumerate(self.dataset.metadatas):
+            if isinstance(metadata, FermataMetadata):
+                break
+
+
         score = self.dataset.tensor_to_score(
-            tensor_score=tensor_chorale)
+            tensor_score=tensor_chorale,
+            fermata_tensor=tensor_metadata[:, :, metadata_index])
 
         return score, tensor_chorale, tensor_metadata
 
