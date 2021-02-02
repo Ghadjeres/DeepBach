@@ -4,6 +4,7 @@ import pickle
 import click
 import tempfile
 from glob import glob
+import subprocess
 
 import music21
 import numpy as np
@@ -197,18 +198,31 @@ def compose():
         request.form['start_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE)
     end_tick_selection = int(
         float(request.form['end_tick']) / NUM_MIDI_TICKS_IN_SIXTEENTH_NOTE)
+    file_path = request.form['file_path']
+    root, ext = os.path.splitext(file_path)
+    dir = os.path.dirname(file_path)
+    assert ext == '.mxl'
+    xml_file = f'{root}.xml'
 
     # if no selection REGENERATE and set chorale length
     if start_tick_selection == 0 and end_tick_selection == 0:
         generated_sheet = compose_from_scratch()
+        generated_sheet.write('xml', xml_file)
         return sheet_to_response(generated_sheet)
-    else:
+    else:        
         # --- Parse request---
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.xml') as file:
-            print(file.name)
-            xml_string = request.form['xml_string']
-            file.write(xml_string)
-            music21_parsed_chorale = converter.parse(file.name)
+        # Old method: does not work because the MuseScore plugin does not export to xml but only to compressed .mxl
+        # with tempfile.NamedTemporaryFile(mode='wb', suffix='.xml') as file:
+        #     print(file.name)
+        #     xml_string = request.form['xml_string']
+        #     file.write(xml_string)
+        #     music21_parsed_chorale = converter.parse(file.name)
+
+        # file_path points to an mxl file: we extract it
+        subprocess.run(f'unzip -o {file_path} -d  {dir}', shell=True)
+        music21_parsed_chorale = converter.parse(xml_file)
+        
+        
         _tensor_sheet, _tensor_metadata = bach_chorales_dataset.transposed_score_and_metadata_tensors(music21_parsed_chorale, semi_tone=0)
 
         start_voice_index = int(request.form['start_staff'])
@@ -227,7 +241,7 @@ def compose():
             batch_size_per_voice = 8
 
 
-        num_total_iterations = _num_iterations * region_length
+        num_total_iterations = int(_num_iterations * region_length / batch_size_per_voice)
 
         fermatas_tensor = get_fermatas_tensor(_tensor_metadata)
 
@@ -247,6 +261,9 @@ def compose():
             random_init=True
         )
 
+
+        
+        output_sheet.write('xml', xml_file)
         response = sheet_to_response(sheet=output_sheet)
         return response
 
