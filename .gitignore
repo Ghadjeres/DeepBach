@@ -2,6 +2,13 @@
 __pycache__/
 *.py[cod]
 *$py.class
+# some files
+_recomposed_by_deepBach.xml
+deepbach.xml
+container.xml
+.vscode/
+settings.json
+launch.json
 
 # C extensions
 *.so

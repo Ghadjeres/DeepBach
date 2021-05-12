@@ -133,6 +133,9 @@ class DeepBach:
             test_chorale = next(self.dataset.corpus_it_gen().__iter__())
             tensor_metadata = self.dataset.get_metadata_tensor(test_chorale)
 
+            if tensor_metadata.size(1) < sequence_length_ticks:
+                tensor_metadata = tensor_metadata.repeat(1, sequence_length_ticks // tensor_metadata.size(1) + 1, 1)
+
             # todo do not work if metadata_length_ticks > sequence_length_ticks
             tensor_metadata = tensor_metadata[:, :sequence_length_ticks, :]
         else:
