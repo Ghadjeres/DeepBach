@@ -1,0 +1,21 @@
+build:
+  python_version: "3.6"
+  gpu: false
+  python_packages:
+    - decorator==4.3.0
+    - flask==1.0.2
+    - flask-cors==3.0.7
+    - itsdangerous==1.1.0
+    - jinja2==2.10
+    - markupsafe==1.1.0
+    - music21==6.7.1
+    - torch==1.0.0 --no-cache-dir
+    - tqdm==4.29.0
+    - werkzeug==0.14.1
+    - numpy==1.19.5
+    - midi2audio==0.1.1
+  system_packages:
+    - musescore
+    - fluidsynth --fix-missing
+    - ffmpeg
+predict: "predict.py:Predictor"
