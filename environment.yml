@@ -39,7 +39,8 @@ dependencies:
   - wheel=0.32.3=py36_0
   - xz=5.2.4=h14c3975_4
   - zlib=1.2.11=h7b6447c_3
-  - pytorch=1.0.0=py3.6_cuda9.0.176_cudnn7.4.1_1
+  - pytorch=1.0.0
+  - cuda100
   - torchvision=0.2.1=py_2
   - pip:
     - decorator==4.3.0
