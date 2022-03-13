@@ -98,9 +98,7 @@ docker run --runtime=nvidia -p 5000:5000 -it --rm ghadjeres/deepbach
 ## Usage within MuseScore
 *Deprecated*
 
-This only works with MuseScore2.
-
-Put `deepBachMuseScore.qml` file in your `MuseScore2/Plugins` directory, and run
+Put `deepBachMuseScore.qml` file in your MuseScore plugins directory, and run
 ```
 python musescore_flask_server.py
 ```
