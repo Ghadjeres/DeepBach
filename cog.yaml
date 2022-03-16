@@ -1,5 +1,5 @@
 build:
-  python_version: "3.6"
+  python_version: "3.7"
   gpu: false
   python_packages:
     - decorator==4.3.0

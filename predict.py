@@ -2,10 +2,12 @@ import json
 import os
 import subprocess
 import tempfile
-from pathlib import Path
 
+import random
+import numpy as np
+import torch
 import click
-import cog
+from cog import BasePredictor, Input, Path
 import music21
 from midi2audio import FluidSynth
 
@@ -15,7 +17,7 @@ from DatasetManager.metadata import FermataMetadata, KeyMetadata, TickMetadata
 from DeepBach.model_manager import DeepBach
 
 
-class Predictor(cog.Predictor):
+class Predictor(BasePredictor):
     def setup(self):
         """Load the model"""
 
@@ -64,28 +66,22 @@ class Predictor(cog.Predictor):
 
         # self.converter = music21.converter.parse('path_to_musicxml.xml')
 
-    @cog.input(
-        "num_iterations",
-        type=int,
-        help="Number of parallel pseudo-Gibbs sampling iterations",
-        default=500,
-    )
-    @cog.input(
-        "sequence_length_ticks",
-        type=int,
-        min=16,
-        help="Length of the generated chorale (in ticks)",
-        default=64,
-    )
-    @cog.input(
-        "output_type",
-        type=str,
-        help="Output representation type: can be audio or midi",
-        default="audio",
-        options=["midi", "audio"],
-    )
-    @cog.input("seed", type=int, default=-1, help="Random seed, -1 for random")
-    def predict(self, num_iterations, sequence_length_ticks, output_type, seed):
+    def predict(
+        self,
+        num_iterations: int = Input(
+            default=500,
+            description="Number of parallel pseudo-Gibbs sampling iterations",
+        ),
+        sequence_length_ticks: int = Input(
+            default=64, ge=16, description="Length of the generated chorale (in ticks)"
+        ),
+        output_type: str = Input(
+            default="audio",
+            choices=["midi", "audio"],
+            description="Output representation type: can be audio or midi",
+        ),
+        seed: int = Input(default=-1, description="Random seed, -1 for random"),
+    ) -> Path:
         """Score Generation"""
         if seed >= 0:
             random.seed(seed)
