@@ -155,7 +155,7 @@ class ChoraleDataset(MusicDataset):
         interval_type, interval_nature = interval.convertSemitoneToSpecifierGeneric(
             semi_tone)
         transposition_interval = interval.Interval(
-            str(interval_nature) + interval_type)
+            str(interval_nature) + str(interval_type))
 
         chorale_tranposed = score.transpose(transposition_interval)
         chorale_tensor = self.get_score_tensor(
