@@ -19,7 +19,7 @@ You can clone this repository, install dependencies using Anaconda and download 
 model together with a dataset  
  with the following commands:
 ```
-git clone git@github.com:SonyCSL-Paris/DeepBach.git
+git clone git@github.com:Ghadjeres/DeepBach.git
 cd DeepBach
 conda env create --name deepbach_pytorch -f environment.yml
 bash dl_dataset_and_models.sh
