@@ -1,7 +1,14 @@
 from abc import ABC, abstractmethod
 import os
+import sys
 from torch.utils.data import TensorDataset, DataLoader
 import torch
+
+# BUG FIX: num_workers > 0 on Windows requires the 'spawn' start method,
+# which fails when running as a package (WinError 1455).
+# Linux/macOS use 'fork' which supports > 0.
+_TRAIN_NUM_WORKERS = 0 if sys.platform == 'win32' else 4
+_USE_PIN_MEMORY = torch.cuda.is_available()
 
 
 class MusicDataset(ABC):
@@ -14,119 +21,46 @@ class MusicDataset(ABC):
         self.cache_dir = cache_dir
 
     @abstractmethod
-    def iterator_gen(self):
-        """
-
-        return: Iterator over the dataset
-        """
-        pass
+    def iterator_gen(self): pass
 
     @abstractmethod
-    def make_tensor_dataset(self):
-        """
-
-        :return: TensorDataset
-        """
-        pass
+    def make_tensor_dataset(self): pass
 
     @abstractmethod
-    def get_score_tensor(self, score):
-        """
-
-        :param score: music21 score object
-        :return: torch tensor, with the score representation
-                 as a tensor
-        """
-        pass
-    
-    @abstractmethod
-    def get_metadata_tensor(self, score):
-        """
-
-        :param score: music21 score object
-        :return: torch tensor, with the metadata representation
-                 as a tensor
-        """
-        pass
+    def get_score_tensor(self, score): pass
 
     @abstractmethod
-    def transposed_score_and_metadata_tensors(self, score, semi_tone):
-        """
-
-        :param score: music21 score object
-        :param semi-tone: int, +12 to -12, semitones to transpose 
-        :return: Transposed score shifted by the semi-tone
-        """
-        pass
+    def get_metadata_tensor(self, score): pass
 
     @abstractmethod
-    def extract_score_tensor_with_padding(self, 
-                                          tensor_score, 
-                                          start_tick, 
-                                          end_tick):
-        """
-
-        :param tensor_score: torch tensor containing the score representation
-        :param start_tick:
-        :param end_tick:
-        :return: tensor_score[:, start_tick: end_tick]
-        with padding if necessary
-        i.e. if start_tick < 0 or end_tick > tensor_score length
-        """
-        pass
+    def transposed_score_and_metadata_tensors(self, score, semi_tone): pass
 
     @abstractmethod
-    def extract_metadata_with_padding(self, 
-                                      tensor_metadata,
-                                      start_tick, 
-                                      end_tick):
-        """
-
-        :param tensor_metadata: torch tensor containing metadata
-        :param start_tick:
-        :param end_tick:
-        :return:
-        """
-        pass
+    def extract_score_tensor_with_padding(self, tensor_score, start_tick, end_tick): pass
 
     @abstractmethod
-    def empty_score_tensor(self, score_length):
-        """
-        
-        :param score_length: int, length of the score in ticks
-        :return: torch long tensor, initialized with start indices 
-        """
-        pass 
+    def extract_metadata_with_padding(self, tensor_metadata, start_tick, end_tick): pass
 
     @abstractmethod
-    def random_score_tensor(self, score_length):
-        """
-
-        :param score_length: int, length of the score in ticks
-        :return: torch long tensor, initialized with random indices
-        """
-        pass
+    def empty_score_tensor(self, score_length): pass
 
     @abstractmethod
-    def tensor_to_score(self, tensor_score):
-        """
+    def random_score_tensor(self, score_length): pass
 
-        :param tensor_score: torch tensor, tensor representation
-                             of the score
-        :return: music21 score object
-        """
-        pass
+    @abstractmethod
+    def tensor_to_score(self, tensor_score): pass
 
     @property
     def tensor_dataset(self):
-        """
-        Loads or computes TensorDataset
-        :return: TensorDataset
-        """
+        """Loads or builds (and caches) the TensorDataset."""
         if self._tensor_dataset is None:
             if self.tensor_dataset_is_cached():
                 print(f'Loading TensorDataset for {self.__repr__()}')
-                self._tensor_dataset = torch.load(self.tensor_dataset_filepath)
+                # BUG FIX: weights_only=False required for TensorDataset objects
+                # (which are not pure-tensor dicts).  Without this flag PyTorch
+                # 2.x emits a FutureWarning; a later release will make it an error.
+                self._tensor_dataset = torch.load(
+                    self.tensor_dataset_filepath, weights_only=False)
             else:
                 print(f'Creating {self.__repr__()} TensorDataset'
                       f' since it is not cached')
@@ -145,37 +79,24 @@ class MusicDataset(ABC):
 
     @property
     def tensor_dataset_filepath(self):
-        tensor_datasets_cache_dir = os.path.join(
-            self.cache_dir,
-            'tensor_datasets')
-        if not os.path.exists(tensor_datasets_cache_dir):
-            os.mkdir(tensor_datasets_cache_dir)
-        fp = os.path.join(
-            tensor_datasets_cache_dir,
-            self.__repr__()
-        )
-        return fp
+        tensor_datasets_cache_dir = os.path.join(self.cache_dir, 'tensor_datasets')
+        # BUG FIX: makedirs instead of mkdir — creates full path if missing
+        os.makedirs(tensor_datasets_cache_dir, exist_ok=True)
+        return os.path.join(tensor_datasets_cache_dir, self.__repr__())
 
     @property
     def filepath(self):
-        tensor_datasets_cache_dir = os.path.join(
-            self.cache_dir,
-            'datasets')
-        if not os.path.exists(tensor_datasets_cache_dir):
-            os.mkdir(tensor_datasets_cache_dir)
-        return os.path.join(
-            self.cache_dir,
-            'datasets',
-            self.__repr__()
-        )
+        datasets_cache_dir = os.path.join(self.cache_dir, 'datasets')
+        os.makedirs(datasets_cache_dir, exist_ok=True)
+        return os.path.join(datasets_cache_dir, self.__repr__())
 
     def data_loaders(self, batch_size, split=(0.85, 0.10)):
         """
-        Returns three data loaders obtained by splitting
-        self.tensor_dataset according to split
-        :param batch_size:
-        :param split:
-        :return:
+        Returns (train, val, eval) DataLoaders.
+
+        GPU SPEEDUP: pin_memory lets the DataLoader pre-page tensors into
+        pinned (non-pageable) host memory so the GPU DMA engine can transfer
+        them without CPU involvement, overlapping transfer with compute.
         """
         assert sum(split) < 1
 
@@ -183,19 +104,19 @@ class MusicDataset(ABC):
         num_examples = len(dataset)
         a, b = split
         train_dataset = TensorDataset(*dataset[: int(a * num_examples)])
-        val_dataset = TensorDataset(*dataset[int(a * num_examples):
-                                             int((a + b) * num_examples)])
-        eval_dataset = TensorDataset(*dataset[int((a + b) * num_examples):])
+        val_dataset   = TensorDataset(*dataset[int(a * num_examples):
+                                               int((a + b) * num_examples)])
+        eval_dataset  = TensorDataset(*dataset[int((a + b) * num_examples):])
 
         train_dl = DataLoader(
             train_dataset,
             batch_size=batch_size,
             shuffle=True,
-            num_workers=4,
-            pin_memory=True,
+            num_workers=_TRAIN_NUM_WORKERS,
+            pin_memory=_USE_PIN_MEMORY,
+            persistent_workers=(_TRAIN_NUM_WORKERS > 0),
             drop_last=True,
         )
-
         val_dl = DataLoader(
             val_dataset,
             batch_size=batch_size,
@@ -204,7 +125,6 @@ class MusicDataset(ABC):
             pin_memory=False,
             drop_last=True,
         )
-
         eval_dl = DataLoader(
             eval_dataset,
             batch_size=batch_size,
